@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Luca's Task Tracker</title>
+  <meta name="description" content="Tägliche Tasks abhaken, Streak halten, nichts geht verloren." />
+
+  <!-- PWA / Icons -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+  <meta name="theme-color" content="#0a0f0d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tasks" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            surface: { 900: '#0a0f0d', 800: '#0f1612', 700: '#151f19', 600: '#1c2a22' },
+            accent: { DEFAULT: '#22c55e', dim: '#16a34a', glow: '#4ade80', muted: '#14532d' },
+          },
+          boxShadow: {
+            glow: '0 0 40px -8px rgba(34, 197, 94, 0.35)',
+            card: '0 4px 24px -4px rgba(0, 0, 0, 0.5)',
+          },
+          animation: {
+            'fade-up': 'fadeUp 0.5s ease-out forwards',
+            'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
+          },
+          keyframes: {
+            fadeUp: { '0%': { opacity: '0', transform: 'translateY(12px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            pulseSoft: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '0.7' } },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 197, 94, 0.12), transparent),
+                  radial-gradient(ellipse 60% 40% at 100% 100%, rgba(34, 197, 94, 0.06), transparent),
+                  #0a0f0d;
+      background-attachment: fixed;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+    }
+    .safe-top { padding-top: max(2rem, env(safe-area-inset-top)); }
+    .safe-bottom { padding-bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2rem)); }
+
+    .habit-checkbox {
+      appearance: none;
+      width: 1.625rem;
+      height: 1.625rem;
+      border: 2px solid rgba(34, 197, 94, 0.4);
+      border-radius: 0.5rem;
+      background: rgba(15, 22, 18, 0.8);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      flex-shrink: 0;
+    }
+    .habit-checkbox:hover { border-color: #4ade80; box-shadow: 0 0 12px rgba(34, 197, 94, 0.25); }
+    .habit-checkbox:focus-visible { outline: 2px solid #4ade80; outline-offset: 2px; }
+    .habit-checkbox:checked {
+      position: relative;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      border-color: #22c55e;
+    }
+    .habit-checkbox.pop { animation: checkPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .habit-checkbox:checked::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      width: 0.375rem;
+      height: 0.625rem;
+      margin: auto;
+      border: solid #fff;
+      border-width: 0 2.5px 2.5px 0;
+      transform: rotate(45deg);
+      transform-origin: center;
+    }
+
+    .habit-label { transition: color 0.3s ease, opacity 0.3s ease; }
+    .habit-label.done {
+      color: rgba(148, 163, 184, 0.7);
+      text-decoration: line-through;
+      text-decoration-color: rgba(34, 197, 94, 0.5);
+    }
+
+    .progress-fill { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    .habit-row { transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.3s ease; }
+    .habit-row:active { transform: scale(0.985); }
+    .habit-row.just-checked { animation: rowGlow 0.6s ease; }
+    .habit-row.leaving { opacity: 0; transform: translateX(24px); }
+
+    @keyframes rowGlow {
+      0% { background: rgba(34, 197, 94, 0.15); }
+      100% { background: transparent; }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes checkPop {
+      0% { transform: scale(0.6); }
+      60% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+
+    .row-enter { opacity: 0; animation: fadeUp 0.45s ease-out forwards; }
+
+    @keyframes confetti-fall {
+      0% { transform: translate3d(0, -12vh, 0) rotate(0deg); opacity: 1; }
+      100% { transform: translate3d(var(--drift, 0), 105vh, 0) rotate(var(--spin, 360deg)); opacity: 0; }
+    }
+    .confetti-piece {
+      position: absolute;
+      top: -12px;
+      border-radius: 2px;
+      animation: confetti-fall var(--duration, 2.4s) ease-out forwards;
+      animation-delay: var(--delay, 0s);
+    }
+    @keyframes celebration-pop {
+      0% { transform: scale(0.85); opacity: 0; }
+      70% { transform: scale(1.03); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .celebration-message-show { animation: celebration-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+    .seg-btn { transition: all 0.2s ease; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen overflow-y-auto font-sans text-slate-100 antialiased">
+  <div class="safe-top safe-bottom mx-auto max-w-lg px-4 sm:px-6">
+    <!-- Header -->
+    <header class="mb-8 text-center animate-fade-up">
+      <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent-muted/30 px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-accent-glow">
+        <span class="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-soft"></span>
+        <span id="weekday-badge">Heute</span>
+      </div>
+      <h1 class="flex flex-wrap items-center justify-center gap-x-2 text-4xl font-bold tracking-tight sm:gap-x-3 sm:text-5xl">
+        <span class="bg-gradient-to-r from-white via-accent-glow to-accent bg-clip-text text-transparent drop-shadow-[0_0_24px_rgba(74,222,128,0.25)]">
+          Luca's Task Tracker
+        </span>
+        <span class="leading-none" role="img" aria-label="Flamme">&#128293;</span>
+      </h1>
+      <p id="greeting" class="mt-3 text-sm text-slate-400 sm:text-base"></p>
+    </header>
+
+    <!-- Stats -->
+    <section class="mb-6 grid grid-cols-2 gap-3 sm:gap-4">
+      <div class="rounded-2xl border border-white/5 bg-surface-800/80 p-4 shadow-card backdrop-blur-sm">
+        <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Fortschritt</p>
+        <p id="progress-text" class="mt-1 font-mono text-2xl font-semibold text-accent-glow">0/0</p>
+        <p class="text-xs text-slate-500">heute erledigt</p>
+      </div>
+      <div class="rounded-2xl border border-accent/20 bg-gradient-to-br from-accent-muted/40 to-surface-800/80 p-4 shadow-glow backdrop-blur-sm">
+        <p class="text-xs font-medium uppercase tracking-wider text-accent/70">Streak</p>
+        <p class="mt-1 flex items-baseline gap-1">
+          <span id="streak-count" class="font-mono text-2xl font-semibold text-white">0</span>
+          <span class="text-sm text-slate-400">Tage</span>
+        </p>
+        <p id="streak-label" class="text-xs text-accent/60">Rekord: 0 Tage</p>
+      </div>
+    </section>
+
+    <!-- Progress bar -->
+    <div class="mb-6 animate-fade-up" style="animation-delay: 0.1s">
+      <div class="mb-2 flex justify-between text-xs text-slate-500">
+        <span>Tagesziel</span>
+        <span id="progress-percent">0%</span>
+      </div>
+      <div class="h-3 overflow-hidden rounded-full bg-surface-700 ring-1 ring-white/5">
+        <div id="progress-bar" class="progress-fill h-full rounded-full bg-gradient-to-r from-accent-dim via-accent to-accent-glow shadow-glow" style="width: 0%"></div>
+      </div>
+    </div>
+
+    <!-- Filter -->
+    <div id="filter-bar" class="mb-4 flex gap-1 rounded-2xl border border-white/5 bg-surface-800/60 p-1 text-sm">
+      <button type="button" data-filter="all" class="seg-btn flex-1 rounded-xl px-3 py-2 font-medium">Alle <span data-count="all" class="font-mono text-xs opacity-60"></span></button>
+      <button type="button" data-filter="open" class="seg-btn flex-1 rounded-xl px-3 py-2 font-medium">Offen <span data-count="open" class="font-mono text-xs opacity-60"></span></button>
+      <button type="button" data-filter="done" class="seg-btn flex-1 rounded-xl px-3 py-2 font-medium">Erledigt <span data-count="done" class="font-mono text-xs opacity-60"></span></button>
+    </div>
+
+    <!-- Task list -->
+    <ul id="habits-list" class="mb-4 space-y-3"></ul>
+    <div id="empty-state" class="mb-4 hidden rounded-2xl border border-dashed border-white/10 bg-surface-800/40 px-6 py-10 text-center">
+      <p class="text-base font-medium text-slate-300">Nichts offen</p>
+      <p class="mt-1 text-sm text-slate-500">Füg unten deine erste Task für heute hinzu.</p>
+    </div>
+
+    <!-- Add task -->
+    <section id="add-habit-section" class="mb-6">
+      <button id="show-add-habit-btn" type="button"
+        class="w-full rounded-2xl border-2 border-dashed border-accent/50 bg-accent-muted/25 px-6 py-5 text-lg font-semibold text-accent-glow shadow-card transition-all duration-300 hover:border-accent hover:bg-accent-muted/40 hover:text-white active:scale-[0.99]">
+        + Neue Task hinzufügen
+      </button>
+      <div id="add-habit-form" class="mt-3 hidden space-y-3 rounded-2xl border border-accent/30 bg-surface-800/80 p-4 shadow-card backdrop-blur-sm">
+        <label for="new-habit-input" class="sr-only">Name der neuen Task</label>
+        <input id="new-habit-input" type="text" maxlength="120" placeholder="Name der neuen Task…" enterkeyhint="done"
+          class="w-full rounded-xl border border-white/10 bg-surface-700/80 px-4 py-3.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+        <div class="flex gap-1 rounded-xl border border-white/5 bg-surface-900/60 p-1 text-sm" id="new-repeat-toggle">
+          <button type="button" data-repeat="once" class="seg-btn flex-1 rounded-lg px-3 py-2 font-medium">Einmalig</button>
+          <button type="button" data-repeat="daily" class="seg-btn flex-1 rounded-lg px-3 py-2 font-medium">Jeden Tag</button>
+        </div>
+        <p class="text-xs leading-relaxed text-slate-500">
+          <span class="text-slate-400">Einmalig:</span> bleibt stehen, bis du sie abhakst.
+          <span class="text-slate-400">Jeden Tag:</span> kommt morgen frisch zurück.
+        </p>
+        <div class="flex gap-2">
+          <button id="confirm-add-habit-btn" type="button"
+            class="flex-1 rounded-xl bg-gradient-to-r from-accent-dim to-accent py-3.5 font-semibold text-surface-900 transition hover:from-accent hover:to-accent-glow active:scale-[0.98]">
+            Hinzufügen
+          </button>
+          <button id="cancel-add-habit-btn" type="button"
+            class="rounded-xl border border-white/10 px-4 py-3.5 text-sm font-medium text-slate-400 transition hover:border-white/20 hover:text-slate-200">
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cleanup -->
+    <button id="cleanup-btn" type="button"
+      class="group w-full rounded-2xl border border-accent/30 bg-gradient-to-r from-accent-muted/50 to-surface-700 px-6 py-4 font-semibold text-accent-glow shadow-glow transition-all duration-300 hover:border-accent hover:from-accent/20 hover:to-accent-muted/60 hover:text-white active:scale-[0.98]">
+      <span class="flex items-center justify-center gap-2">
+        <svg class="h-5 w-5 transition-transform duration-300 group-hover:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Erledigte aufräumen
+      </span>
+    </button>
+    <p id="new-day-hint" class="mt-3 text-center text-xs text-slate-600"></p>
+
+    <!-- Verlauf -->
+    <section class="mt-10">
+      <button id="history-toggle" type="button"
+        class="flex w-full items-center justify-between rounded-2xl border border-white/5 bg-surface-800/60 px-5 py-4 text-left transition hover:border-accent/20 hover:bg-surface-800">
+        <span>
+          <span class="block text-sm font-semibold text-slate-200">Verlauf</span>
+          <span id="history-summary" class="block text-xs text-slate-500">Alles, was du je abgehakt hast</span>
+        </span>
+        <svg id="history-chevron" class="h-5 w-5 shrink-0 text-slate-500 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div id="history-panel" class="mt-3 hidden space-y-3"></div>
+    </section>
+
+    <!-- Daten -->
+    <section class="mt-8 rounded-2xl border border-white/5 bg-surface-800/40 p-4">
+      <p class="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">Daten</p>
+      <div class="flex flex-wrap gap-2">
+        <button id="export-btn" type="button" class="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Backup speichern</button>
+        <button id="import-btn" type="button" class="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Backup laden</button>
+        <input id="import-file" type="file" accept="application/json,.json" class="hidden" />
+      </div>
+      <p id="storage-note" class="mt-3 text-xs leading-relaxed text-slate-600"></p>
+    </section>
+  </div>
+
+  <!-- Celebration -->
+  <div id="celebration-overlay"
+    class="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/25 opacity-0 backdrop-blur-[2px] transition-opacity duration-500"
+    aria-hidden="true">
+    <div id="confetti-container" class="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true"></div>
+    <div id="celebration-message"
+      class="relative z-10 mx-4 max-w-sm scale-95 rounded-3xl border border-accent/40 bg-surface-800/95 px-8 py-7 text-center opacity-0 shadow-glow backdrop-blur-md transition-all duration-500">
+      <p id="celebration-title" class="bg-gradient-to-r from-white via-accent-glow to-accent bg-clip-text text-2xl font-bold text-transparent sm:text-3xl">Perfekter Tag!</p>
+      <p id="celebration-sub" class="mt-2 text-base font-medium text-slate-300 sm:text-lg">
+        <span aria-hidden="true">&#128293;</span> Du hast alles geschafft!
+      </p>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"
+    class="pointer-events-none fixed left-1/2 z-50 flex -translate-x-1/2 translate-y-4 items-center gap-3 rounded-xl border border-accent/30 bg-surface-800 px-5 py-3 text-sm font-medium text-accent-glow opacity-0 shadow-glow transition-all duration-300"
+    style="bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem))" role="status">
+    <span id="toast-text"></span>
+    <button id="toast-action" type="button" class="hidden shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent-glow transition hover:bg-accent/25"></button>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+
+    /* ============================================================
+       1. Speicher (IndexedDB + localStorage als Spiegel)
+       ============================================================ */
+    const DB_NAME = 'lucaTasks';
+    const DB_STORE = 'kv';
+    const STATE_KEY = 'state';
+    const LS_KEY = 'lucaTasks.v3';
+    const LEGACY_LS_KEY = 'lucaHabitTracker';
+    const SCHEMA_VERSION = 3;
+
+    let dbPromise = null;
+    function openDB() {
+      if (dbPromise) return dbPromise;
+      dbPromise = new Promise(function (resolve, reject) {
+        if (!('indexedDB' in window)) return reject(new Error('IndexedDB nicht verfügbar'));
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = function () {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+        };
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      }).catch(function (err) { dbPromise = null; throw err; });
+      return dbPromise;
+    }
+
+    function idbGet(key) {
+      return openDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          const tx = db.transaction(DB_STORE, 'readonly');
+          const req = tx.objectStore(DB_STORE).get(key);
+          req.onsuccess = function () { resolve(req.result); };
+          req.onerror = function () { reject(req.error); };
+        });
+      });
+    }
+
+    function idbSet(key, value) {
+      return openDB().then(function (db) {
+        return new Promise(function (resolve, reject) {
+          const tx = db.transaction(DB_STORE, 'readwrite');
+          tx.objectStore(DB_STORE).put(value, key);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { reject(tx.error); };
+        });
+      });
+    }
+
+    let saveTimer = null;
+    function save() {
+      // localStorage sofort (überlebt auch ein hartes Schliessen der App)
+      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () {
+        idbSet(STATE_KEY, state).catch(function () {/* localStorage reicht als Fallback */});
+      }, 120);
+    }
+
+    function flushSave() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {}
+      idbSet(STATE_KEY, state).catch(function () {});
+    }
+
+    /* ============================================================
+       2. Datenmodell
+       ============================================================ */
+    function todayKey() { return dateKey(new Date()); }
+
+    function dateKey(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    }
+
+    function parseKey(key) {
+      const p = String(key).split('-').map(Number);
+      return new Date(p[0], p[1] - 1, p[2]);
+    }
+
+    function daysBetween(a, b) {
+      return Math.round((parseKey(b) - parseKey(a)) / 86400000);
+    }
+
+    function newId() {
+      return 'task-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function emptyState() {
+      return {
+        version: SCHEMA_VERSION,
+        day: todayKey(),
+        streak: 0,
+        bestStreak: 0,
+        perfectToday: false,
+        celebrationsToday: 0,
+        tasks: [],
+        journal: [],   // jede erledigte Task, nach Datum – wird nie automatisch gelöscht
+        history: {},   // pro Tag: { done, total, perfect }
+      };
+    }
+
+    function normalizeText(text) {
+      return String(text == null ? '' : text).replace(/\uFFFD/g, '').trim();
+    }
+
+    function normalize(raw) {
+      const base = emptyState();
+      if (!raw || typeof raw !== 'object') return base;
+
+      // Alte Version (v1/v2): "habits" statt "tasks" – waren tägliche Gewohnheiten
+      const list = Array.isArray(raw.tasks) ? raw.tasks : (Array.isArray(raw.habits) ? raw.habits : []);
+      const legacy = !Array.isArray(raw.tasks);
+
+      base.tasks = list.map(function (t) {
+        return {
+          id: t.id || newId(),
+          name: normalizeText(t.name) || 'Unbenannt',
+          done: !!t.done,
+          repeat: t.repeat === 'daily' || (legacy && t.repeat == null) ? 'daily' : 'once',
+          createdAt: String(t.createdAt || raw.day || todayKey()).slice(0, 10),
+          doneAt: t.doneAt ? String(t.doneAt).slice(0, 10) : null,
+        };
+      }).filter(function (t) { return t.name; });
+
+      base.day = typeof raw.day === 'string' ? raw.day : todayKey();
+      base.streak = Number(raw.streak) || 0;
+      base.bestStreak = Math.max(Number(raw.bestStreak) || 0, base.streak);
+      base.perfectToday = !!raw.perfectToday;
+      base.celebrationsToday = Number(raw.celebrationsToday) || 0;
+      base.journal = Array.isArray(raw.journal) ? raw.journal.filter(function (e) { return e && e.name && e.date; }) : [];
+      base.history = (raw.history && typeof raw.history === 'object') ? raw.history : {};
+      return base;
+    }
+
+    function loadState() {
+      return idbGet(STATE_KEY)
+        .catch(function () { return null; })
+        .then(function (fromDb) {
+          if (fromDb) return fromDb;
+          try {
+            const raw = localStorage.getItem(LS_KEY);
+            if (raw) return JSON.parse(raw);
+          } catch (e) {}
+          try {
+            const legacyRaw = localStorage.getItem(LEGACY_LS_KEY);
+            if (legacyRaw) return JSON.parse(legacyRaw);
+          } catch (e) {}
+          return null;
+        })
+        .then(normalize);
+    }
+
+    /* ============================================================
+       3. Tageswechsel – nichts wird gelöscht
+       ============================================================ */
+    function rollOverIfNeeded() {
+      const today = todayKey();
+      if (state.day === today) return false;
+
+      const prev = state.day;
+      const gap = Math.max(1, daysBetween(prev, today));
+
+      const total = state.tasks.length;
+      const done = state.tasks.filter(function (t) { return t.done; }).length;
+      const perfect = state.perfectToday || (total > 0 && done === total);
+
+      // Tag archivieren
+      state.history[prev] = { done: done, total: total, perfect: perfect };
+
+      // Erledigte ins Journal – nichts geht verloren
+      state.tasks.forEach(function (t) {
+        if (t.done) {
+          state.journal.push({ name: t.name, repeat: t.repeat, date: (t.doneAt || prev).slice(0, 10) });
+        }
+      });
+
+      // Einmalige erledigte Tasks verlassen die Liste, offene bleiben stehen.
+      // Tägliche Tasks kommen frisch (unabgehakt) zurück.
+      state.tasks = state.tasks.filter(function (t) {
+        return !(t.repeat === 'once' && t.done);
+      }).map(function (t) {
+        t.done = false;
+        t.doneAt = null;
+        return t;
+      });
+
+      // Streak
+      if (perfect) state.streak = gap === 1 ? state.streak + 1 : 1;
+      else state.streak = 0;
+      state.bestStreak = Math.max(state.bestStreak, state.streak);
+
+      state.day = today;
+      state.perfectToday = false;
+      state.celebrationsToday = 0;
+
+      if (state.journal.length > 1000) state.journal = state.journal.slice(-1000);
+
+      save();
+      return true;
+    }
+
+    /* ============================================================
+       4. DOM
+       ============================================================ */
+    const el = {
+      weekdayBadge: document.getElementById('weekday-badge'),
+      greeting: document.getElementById('greeting'),
+      progressText: document.getElementById('progress-text'),
+      progressPercent: document.getElementById('progress-percent'),
+      progressBar: document.getElementById('progress-bar'),
+      streakCount: document.getElementById('streak-count'),
+      streakLabel: document.getElementById('streak-label'),
+      filterBar: document.getElementById('filter-bar'),
+      list: document.getElementById('habits-list'),
+      emptyState: document.getElementById('empty-state'),
+      showAddBtn: document.getElementById('show-add-habit-btn'),
+      addForm: document.getElementById('add-habit-form'),
+      newInput: document.getElementById('new-habit-input'),
+      newRepeatToggle: document.getElementById('new-repeat-toggle'),
+      confirmAdd: document.getElementById('confirm-add-habit-btn'),
+      cancelAdd: document.getElementById('cancel-add-habit-btn'),
+      cleanupBtn: document.getElementById('cleanup-btn'),
+      hint: document.getElementById('new-day-hint'),
+      historyToggle: document.getElementById('history-toggle'),
+      historyPanel: document.getElementById('history-panel'),
+      historySummary: document.getElementById('history-summary'),
+      historyChevron: document.getElementById('history-chevron'),
+      exportBtn: document.getElementById('export-btn'),
+      importBtn: document.getElementById('import-btn'),
+      importFile: document.getElementById('import-file'),
+      storageNote: document.getElementById('storage-note'),
+      toast: document.getElementById('toast'),
+      toastText: document.getElementById('toast-text'),
+      toastAction: document.getElementById('toast-action'),
+      overlay: document.getElementById('celebration-overlay'),
+      celebrationMsg: document.getElementById('celebration-message'),
+      celebrationTitle: document.getElementById('celebration-title'),
+      celebrationSub: document.getElementById('celebration-sub'),
+      confetti: document.getElementById('confetti-container'),
+    };
+
+    let state = emptyState();
+    let filter = 'all';
+    let editingId = null;
+    let newRepeat = 'once';
+    let freshIds = new Set();
+    let firstRender = true;
+    let lastDeleted = null;
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /* ============================================================
+       5. Hilfsfunktionen
+       ============================================================ */
+    function doneCount() { return state.tasks.filter(function (t) { return t.done; }).length; }
+    function openCount() { return state.tasks.length - doneCount(); }
+    function allDone() { return state.tasks.length > 0 && openCount() === 0; }
+
+    function visibleTasks() {
+      if (filter === 'open') return state.tasks.filter(function (t) { return !t.done; });
+      if (filter === 'done') return state.tasks.filter(function (t) { return t.done; });
+      return state.tasks;
+    }
+
+    function formatDayLabel(key) {
+      const today = todayKey();
+      if (key === today) return 'Heute';
+      const diff = daysBetween(key, today);
+      if (diff === 1) return 'Gestern';
+      return parseKey(key).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'long' });
+    }
+
+    function greetingText() {
+      const h = new Date().getHours();
+      const part = h < 5 ? 'Gute Nacht' : h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend';
+      const date = new Date().toLocaleDateString('de-CH', { day: 'numeric', month: 'long', year: 'numeric' });
+      return part + ' – heute ist der ' + date;
+    }
+
+    /* ============================================================
+       6. Toast
+       ============================================================ */
+    let toastTimer = null;
+    let toastHandler = null;
+
+    function showToast(message, actionLabel, onAction) {
+      el.toastText.textContent = message;
+      if (actionLabel) {
+        el.toastAction.textContent = actionLabel;
+        el.toastAction.classList.remove('hidden');
+        toastHandler = onAction;
+        el.toast.classList.remove('pointer-events-none');
+      } else {
+        el.toastAction.classList.add('hidden');
+        toastHandler = null;
+        el.toast.classList.add('pointer-events-none');
+      }
+      el.toast.classList.remove('opacity-0', 'translate-y-4');
+      el.toast.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 2800);
+    }
+
+    function hideToast() {
+      el.toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+      el.toast.classList.remove('opacity-100', 'translate-y-0');
+      toastHandler = null;
+    }
+
+    el.toastAction.addEventListener('click', function () {
+      if (toastHandler) toastHandler();
+      hideToast();
+    });
+
+    /* ============================================================
+       7. Feier-Animation
+       ============================================================ */
+    const CELEBRATIONS = [
+      { title: 'Perfekter Tag!', sub: '🔥 Du hast alles geschafft!' },
+      { title: 'Schon wieder!', sub: '💪 Nachschlag auch erledigt.' },
+      { title: 'Unaufhaltbar.', sub: '⚡ Dritte Runde, alles clean.' },
+      { title: 'Ernsthaft jetzt?', sub: '🏆 Der Tag gehört dir.' },
+    ];
+
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function spawnConfetti() {
+      if (reduceMotion) return;
+      el.confetti.innerHTML = '';
+      const colors = ['#22c55e', '#4ade80', '#86efac', '#fbbf24', '#ffffff', '#16a34a'];
+      for (let i = 0; i < 48; i++) {
+        const piece = document.createElement('div');
+        const size = 6 + Math.random() * 6;
+        piece.className = 'confetti-piece';
+        piece.style.cssText =
+          'left:' + (Math.random() * 100) + '%;' +
+          'width:' + size + 'px;' +
+          'height:' + Math.max(4, size * 0.55) + 'px;' +
+          'background:' + colors[Math.floor(Math.random() * colors.length)] + ';' +
+          '--delay:' + (Math.random() * 0.45) + 's;' +
+          '--duration:' + (2 + Math.random() * 1.2) + 's;' +
+          '--drift:' + ((Math.random() - 0.5) * 120) + 'px;' +
+          '--spin:' + (360 + Math.random() * 540) + 'deg;';
+        el.confetti.appendChild(piece);
+      }
+    }
+
+    let hideCelebrationTimer = null;
+
+    function celebrate() {
+      const idx = Math.min(state.celebrationsToday, CELEBRATIONS.length - 1);
+      const msg = CELEBRATIONS[idx];
+      state.celebrationsToday += 1;
+      state.perfectToday = true;
+      save();
+
+      el.celebrationTitle.textContent = msg.title;
+      el.celebrationSub.textContent = msg.sub;
+
+      clearTimeout(hideCelebrationTimer);
+      spawnConfetti();
+
+      el.overlay.classList.remove('opacity-0', 'pointer-events-none');
+      el.overlay.setAttribute('aria-hidden', 'false');
+      el.celebrationMsg.classList.remove('opacity-0', 'scale-95');
+      el.celebrationMsg.classList.add('celebration-message-show', 'opacity-100', 'scale-100');
+
+      el.progressBar.classList.add('animate-pulse-soft');
+      setTimeout(function () { el.progressBar.classList.remove('animate-pulse-soft'); }, 2000);
+
+      hideCelebrationTimer = setTimeout(hideCelebration, 4500);
+    }
+
+    function hideCelebration() {
+      clearTimeout(hideCelebrationTimer);
+      el.overlay.classList.add('opacity-0', 'pointer-events-none');
+      el.overlay.setAttribute('aria-hidden', 'true');
+      el.celebrationMsg.classList.remove('celebration-message-show', 'opacity-100', 'scale-100');
+      el.celebrationMsg.classList.add('opacity-0', 'scale-95');
+      setTimeout(function () { el.confetti.innerHTML = ''; }, 500);
+    }
+
+    el.overlay.addEventListener('click', hideCelebration);
+
+    /**
+     * Führt eine Änderung aus und feiert, sobald der Tag dadurch
+     * (wieder) komplett ist. Neue Tasks am selben Tag lösen die
+     * Animation erneut aus.
+     */
+    function mutate(fn) {
+      const before = allDone();
+      fn();
+      save();
+      if (!before && allDone()) celebrate();
+    }
+
+    /* ============================================================
+       8. Rendern
+       ============================================================ */
+    function renderStats() {
+      const done = doneCount();
+      const total = state.tasks.length;
+      const pct = total ? Math.round((done / total) * 100) : 0;
+
+      el.weekdayBadge.textContent = new Date().toLocaleDateString('de-CH', { weekday: 'long' });
+      el.greeting.textContent = greetingText();
+      el.progressText.textContent = done + '/' + total;
+      el.progressPercent.textContent = pct + '%';
+      el.progressBar.style.width = pct + '%';
+      el.streakCount.textContent = state.streak;
+      el.streakLabel.textContent = 'Rekord: ' + state.bestStreak + (state.bestStreak === 1 ? ' Tag' : ' Tage');
+
+      const open = openCount();
+      if (total === 0) {
+        el.hint.textContent = 'Noch keine Tasks für heute.';
+      } else if (open === 0) {
+        el.hint.textContent = 'Alles erledigt. Erledigte Tasks wandern automatisch um Mitternacht in den Verlauf.';
+      } else {
+        el.hint.textContent = open + (open === 1 ? ' Task' : ' Tasks') + ' noch offen';
+      }
+      el.hint.classList.toggle('text-accent/70', total > 0 && open === 0);
+
+      el.filterBar.querySelector('[data-count="all"]').textContent = total ? total : '';
+      el.filterBar.querySelector('[data-count="open"]').textContent = open ? open : '';
+      el.filterBar.querySelector('[data-count="done"]').textContent = done ? done : '';
+
+      Array.prototype.forEach.call(el.filterBar.querySelectorAll('[data-filter]'), function (btn) {
+        const active = btn.dataset.filter === filter;
+        btn.className = 'seg-btn flex-1 rounded-xl px-3 py-2 font-medium ' +
+          (active ? 'bg-accent/15 text-accent-glow shadow-[inset_0_0_0_1px_rgba(34,197,94,0.25)]' : 'text-slate-400 hover:text-slate-200');
+      });
+
+      const totalDone = state.journal.length + doneCount();
+      el.historySummary.textContent = totalDone
+        ? totalDone + (totalDone === 1 ? ' Task' : ' Tasks') + ' abgehakt – nichts davon wird gelöscht'
+        : 'Hier landet alles, was du abhakst';
+    }
+
+    function repeatBadge(task) {
+      if (task.repeat === 'daily') {
+        return '<span class="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent/80">täglich</span>';
+      }
+      const age = daysBetween(task.createdAt, todayKey());
+      if (age >= 1) {
+        return '<span class="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400/80">seit ' + age + (age === 1 ? ' Tag' : ' Tagen') + '</span>';
+      }
+      return '';
+    }
+
+    function taskRow(task, index) {
+      const isEditing = editingId === task.id;
+      const enter = firstRender || freshIds.has(task.id);
+      const rowClasses = [
+        'habit-row flex items-center gap-2 rounded-2xl border bg-surface-800/60 px-3 py-4 shadow-card backdrop-blur-sm sm:gap-3 sm:px-4',
+        isEditing ? 'border-accent/30 ring-1 ring-accent/20' : 'border-white/5 hover:border-accent/20 hover:bg-surface-700/50',
+      ].join(' ');
+
+      if (isEditing) {
+        return '<li>' +
+          '<div class="' + rowClasses.replace('flex items-center', 'block') + '" data-id="' + task.id + '">' +
+            '<input type="text" class="task-edit-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
+              'data-id="' + task.id + '" value="' + escapeHtml(task.name) + '" maxlength="120" enterkeyhint="done" aria-label="Task bearbeiten" />' +
+            '<div class="mt-3 flex gap-1 rounded-xl border border-white/5 bg-surface-900/60 p-1 text-xs" data-edit-repeat="' + task.id + '">' +
+              '<button type="button" data-action="set-repeat" data-repeat="once" data-id="' + task.id + '" class="seg-btn flex-1 rounded-lg px-2 py-1.5 font-medium ' +
+                (task.repeat === 'once' ? 'bg-accent/15 text-accent-glow' : 'text-slate-400') + '">Einmalig</button>' +
+              '<button type="button" data-action="set-repeat" data-repeat="daily" data-id="' + task.id + '" class="seg-btn flex-1 rounded-lg px-2 py-1.5 font-medium ' +
+                (task.repeat === 'daily' ? 'bg-accent/15 text-accent-glow' : 'text-slate-400') + '">Jeden Tag</button>' +
+            '</div>' +
+            '<div class="mt-3 flex gap-2">' +
+              '<button type="button" data-action="save" data-id="' + task.id + '" class="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">Speichern</button>' +
+              '<button type="button" data-action="cancel" data-id="' + task.id + '" class="rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:text-slate-200">Abbrechen</button>' +
+            '</div>' +
+          '</div>' +
+        '</li>';
+      }
+
+      return '<li class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
+        '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
+          '<span class="flex shrink-0 items-center self-center">' +
+            '<input type="checkbox" class="habit-checkbox m-0 block self-center" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
+              (task.done ? 'checked' : '') + ' aria-label="' + escapeHtml(task.name) + ' abhaken" />' +
+          '</span>' +
+          '<label for="cb-' + task.id + '" class="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">' +
+            '<span class="habit-label break-words text-base font-medium ' + (task.done ? 'done' : 'text-slate-200') + '">' + escapeHtml(task.name) + '</span>' +
+            repeatBadge(task) +
+          '</label>' +
+          '<div class="flex shrink-0 items-center gap-0.5">' +
+            '<button type="button" class="rounded-lg p-2 text-slate-400 transition hover:bg-white/5 hover:text-accent-glow" data-action="edit" data-id="' + task.id + '" title="Bearbeiten" aria-label="Bearbeiten">' +
+              '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>' +
+            '</button>' +
+            '<button type="button" class="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/10 hover:text-red-400" data-action="delete" data-id="' + task.id + '" title="Löschen" aria-label="Löschen">' +
+              '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+      '</li>';
+    }
+
+    function renderList() {
+      const tasks = visibleTasks();
+      el.list.innerHTML = tasks.map(taskRow).join('');
+      el.emptyState.classList.toggle('hidden', tasks.length > 0);
+
+      if (tasks.length === 0) {
+        const p = el.emptyState.querySelector('p');
+        const sub = el.emptyState.querySelectorAll('p')[1];
+        if (state.tasks.length === 0) {
+          p.textContent = 'Noch nichts geplant';
+          sub.textContent = 'Füg unten deine erste Task für heute hinzu.';
+        } else if (filter === 'open') {
+          p.textContent = 'Nichts mehr offen';
+          sub.textContent = 'Alles abgehakt. Neue Task hinzufügen?';
+        } else {
+          p.textContent = 'Noch nichts erledigt';
+          sub.textContent = 'Hak deine erste Task von heute ab.';
+        }
+      }
+
+      freshIds.clear();
+      firstRender = false;
+
+      if (editingId) {
+        requestAnimationFrame(function () {
+          const input = el.list.querySelector('.task-edit-input[data-id="' + editingId + '"]');
+          if (input) { input.focus(); input.select(); }
+        });
+      }
+    }
+
+    function render() {
+      renderStats();
+      renderList();
+      renderHistory();
+    }
+
+    /* ============================================================
+       9. Verlauf
+       ============================================================ */
+    function historyGroups() {
+      const map = new Map();
+      function ensure(date) {
+        if (!map.has(date)) map.set(date, { date: date, items: [], stats: null });
+        return map.get(date);
+      }
+      state.journal.forEach(function (entry) { ensure(entry.date).items.push(entry); });
+      Object.keys(state.history).forEach(function (d) { ensure(d).stats = state.history[d]; });
+
+      const today = todayKey();
+      state.tasks.filter(function (t) { return t.done; }).forEach(function (t) {
+        ensure(today).items.push({ name: t.name, repeat: t.repeat, date: today });
+      });
+
+      return Array.from(map.values()).sort(function (a, b) { return b.date < a.date ? -1 : 1; }).slice(0, 60);
+    }
+
+    function renderHistory() {
+      if (el.historyPanel.classList.contains('hidden')) return;
+      const groups = historyGroups();
+      if (!groups.length) {
+        el.historyPanel.innerHTML = '<p class="rounded-2xl border border-white/5 bg-surface-800/40 px-5 py-6 text-center text-sm text-slate-500">Noch kein Verlauf. Hak deine erste Task ab.</p>';
+        return;
+      }
+      el.historyPanel.innerHTML = groups.map(function (g) {
+        const perfect = g.stats && g.stats.perfect;
+        const statsLine = g.stats
+          ? g.stats.done + '/' + g.stats.total + ' erledigt'
+          : g.items.length + (g.items.length === 1 ? ' Task' : ' Tasks') + ' erledigt';
+        return '<div class="rounded-2xl border border-white/5 bg-surface-800/50 px-5 py-4">' +
+          '<div class="flex items-baseline justify-between gap-3">' +
+            '<p class="text-sm font-semibold text-slate-200">' + escapeHtml(formatDayLabel(g.date)) + '</p>' +
+            '<p class="font-mono text-xs ' + (perfect ? 'text-accent-glow' : 'text-slate-500') + '">' + (perfect ? '🔥 ' : '') + statsLine + '</p>' +
+          '</div>' +
+          (g.items.length
+            ? '<ul class="mt-2 space-y-1">' + g.items.map(function (it) {
+                return '<li class="flex items-start gap-2 text-sm text-slate-400">' +
+                  '<span class="mt-[3px] text-accent/70" aria-hidden="true">✓</span>' +
+                  '<span class="break-words">' + escapeHtml(it.name) + '</span>' +
+                '</li>';
+              }).join('') + '</ul>'
+            : '<p class="mt-2 text-sm text-slate-600">Nichts abgehakt</p>') +
+        '</div>';
+      }).join('');
+    }
+
+    el.historyToggle.addEventListener('click', function () {
+      const hidden = el.historyPanel.classList.toggle('hidden');
+      el.historyChevron.style.transform = hidden ? '' : 'rotate(180deg)';
+      if (!hidden) { renderHistory(); }
+    });
+
+    /* ============================================================
+       10. Aktionen
+       ============================================================ */
+    function addTask(name, repeat) {
+      const clean = normalizeText(name);
+      if (!clean) {
+        el.newInput.focus();
+        showToast('Gib der Task noch einen Namen.');
+        return false;
+      }
+      const task = {
+        id: newId(),
+        name: clean,
+        done: false,
+        repeat: repeat === 'daily' ? 'daily' : 'once',
+        createdAt: todayKey(),
+        doneAt: null,
+      };
+      freshIds.add(task.id);
+      state.tasks.push(task);
+      save();
+      if (filter === 'done') filter = 'all';
+      render();
+      showToast('„' + clean + '“ hinzugefügt');
+      return true;
+    }
+
+    function deleteTask(id) {
+      const index = state.tasks.findIndex(function (t) { return t.id === id; });
+      if (index === -1) return;
+      const task = state.tasks[index];
+      lastDeleted = { task: task, index: index };
+      if (editingId === id) editingId = null;
+
+      const row = el.list.querySelector('.habit-row[data-id="' + id + '"]');
+      if (row) row.classList.add('leaving');
+
+      setTimeout(function () {
+        mutate(function () {
+          state.tasks.splice(index, 1);
+        });
+        render();
+        showToast('„' + task.name + '“ gelöscht', 'Rückgängig', function () {
+          if (!lastDeleted) return;
+          state.tasks.splice(Math.min(lastDeleted.index, state.tasks.length), 0, lastDeleted.task);
+          freshIds.add(lastDeleted.task.id);
+          lastDeleted = null;
+          save();
+          render();
+        });
+      }, 180);
+    }
+
+    function saveEdit(id, rawName) {
+      const name = normalizeText(rawName);
+      if (!name) {
+        showToast('Der Name darf nicht leer sein.');
+        const input = el.list.querySelector('.task-edit-input[data-id="' + id + '"]');
+        if (input) input.focus();
+        return;
+      }
+      const task = state.tasks.find(function (t) { return t.id === id; });
+      if (!task) return;
+      task.name = name;
+      editingId = null;
+      save();
+      render();
+      showToast('Gespeichert');
+    }
+
+    function cleanupDone() {
+      const doneOnce = state.tasks.filter(function (t) { return t.done && t.repeat === 'once'; });
+      const doneDaily = state.tasks.filter(function (t) { return t.done && t.repeat === 'daily'; });
+
+      if (!doneOnce.length && !doneDaily.length) {
+        showToast('Noch nichts erledigt zum Aufräumen.');
+        return;
+      }
+      if (!doneOnce.length) {
+        showToast('Tägliche Tasks bleiben bis Mitternacht stehen.');
+        return;
+      }
+
+      doneOnce.forEach(function (t) {
+        state.journal.push({ name: t.name, repeat: t.repeat, date: (t.doneAt || todayKey()).slice(0, 10) });
+      });
+      state.tasks = state.tasks.filter(function (t) { return !(t.done && t.repeat === 'once'); });
+      save();
+      render();
+      showToast(doneOnce.length + (doneOnce.length === 1 ? ' Task' : ' Tasks') + ' im Verlauf abgelegt');
+    }
+
+    /* ============================================================
+       11. Events
+       ============================================================ */
+    el.list.addEventListener('change', function (e) {
+      if (!e.target.classList.contains('habit-checkbox')) return;
+      const id = e.target.dataset.id;
+      const task = state.tasks.find(function (t) { return t.id === id; });
+      if (!task) return;
+
+      const row = e.target.closest('.habit-row');
+      const label = row ? row.querySelector('.habit-label') : null;
+
+      mutate(function () {
+        task.done = e.target.checked;
+        task.doneAt = task.done ? todayKey() : null;
+      });
+
+      if (label) label.classList.toggle('done', task.done);
+      if (task.done && row) {
+        e.target.classList.add('pop');
+        row.classList.add('just-checked');
+        setTimeout(function () {
+          row.classList.remove('just-checked');
+          e.target.classList.remove('pop');
+        }, 620);
+      }
+
+      renderStats();
+
+      // Bei aktivem Filter verschwindet die Zeile nach der Animation
+      if (filter !== 'all') {
+        setTimeout(function () {
+          if (row) row.classList.add('leaving');
+          setTimeout(renderList, 200);
+        }, 420);
+      }
+    });
+
+    el.list.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+
+      if (action === 'delete') return deleteTask(id);
+      if (action === 'edit') { editingId = id; return renderList(); }
+      if (action === 'cancel') { editingId = null; return renderList(); }
+      if (action === 'save') {
+        const input = el.list.querySelector('.task-edit-input[data-id="' + id + '"]');
+        return saveEdit(id, input ? input.value : '');
+      }
+      if (action === 'set-repeat') {
+        const task = state.tasks.find(function (t) { return t.id === id; });
+        if (!task) return;
+        task.repeat = btn.dataset.repeat;
+        save();
+        renderList();
+      }
+    });
+
+    el.list.addEventListener('keydown', function (e) {
+      if (!e.target.classList.contains('task-edit-input')) return;
+      if (e.key === 'Enter') { e.preventDefault(); saveEdit(e.target.dataset.id, e.target.value); }
+      if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderList(); }
+    });
+
+    el.filterBar.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-filter]');
+      if (!btn) return;
+      filter = btn.dataset.filter;
+      render();
+    });
+
+    function showAddForm() {
+      el.showAddBtn.classList.add('hidden');
+      el.addForm.classList.remove('hidden');
+      el.newInput.value = '';
+      el.newInput.focus();
+    }
+
+    function hideAddForm() {
+      el.addForm.classList.add('hidden');
+      el.showAddBtn.classList.remove('hidden');
+      el.newInput.value = '';
+    }
+
+    function paintRepeatToggle() {
+      Array.prototype.forEach.call(el.newRepeatToggle.querySelectorAll('[data-repeat]'), function (btn) {
+        const active = btn.dataset.repeat === newRepeat;
+        btn.className = 'seg-btn flex-1 rounded-lg px-3 py-2 font-medium ' +
+          (active ? 'bg-accent/15 text-accent-glow shadow-[inset_0_0_0_1px_rgba(34,197,94,0.25)]' : 'text-slate-400 hover:text-slate-200');
+      });
+    }
+
+    el.newRepeatToggle.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-repeat]');
+      if (!btn) return;
+      newRepeat = btn.dataset.repeat;
+      paintRepeatToggle();
+    });
+
+    el.showAddBtn.addEventListener('click', showAddForm);
+    el.cancelAdd.addEventListener('click', hideAddForm);
+    el.confirmAdd.addEventListener('click', function () {
+      if (addTask(el.newInput.value, newRepeat)) {
+        el.newInput.value = '';
+        el.newInput.focus();
+      }
+    });
+    el.newInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (addTask(el.newInput.value, newRepeat)) {
+          el.newInput.value = '';
+        }
+      }
+      if (e.key === 'Escape') hideAddForm();
+    });
+
+    el.cleanupBtn.addEventListener('click', cleanupDone);
+
+    /* ============================================================
+       12. Backup
+       ============================================================ */
+    el.exportBtn.addEventListener('click', function () {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'task-tracker-backup-' + todayKey() + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      showToast('Backup gespeichert');
+    });
+
+    el.importBtn.addEventListener('click', function () { el.importFile.click(); });
+
+    el.importFile.addEventListener('change', function () {
+      const file = el.importFile.files && el.importFile.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          const data = JSON.parse(String(reader.result));
+          if (!confirm('Backup laden? Die aktuellen Tasks werden dadurch ersetzt.')) return;
+          state = normalize(data);
+          rollOverIfNeeded();
+          firstRender = true;
+          save();
+          render();
+          showToast('Backup geladen');
+        } catch (err) {
+          showToast('Diese Datei konnte nicht gelesen werden.');
+        } finally {
+          el.importFile.value = '';
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    /* ============================================================
+       13. Tageswechsel im Hintergrund + Start
+       ============================================================ */
+    function checkDayChange() {
+      if (rollOverIfNeeded()) {
+        firstRender = true;
+        render();
+        showToast('Neuer Tag – offene Tasks sind geblieben.');
+      }
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) { checkDayChange(); renderStats(); }
+    });
+    window.addEventListener('focus', checkDayChange);
+    setInterval(checkDayChange, 60000);
+    window.addEventListener('pagehide', flushSave);
+
+    function describeStorage() {
+      const parts = ['Alles liegt lokal auf diesem Gerät (IndexedDB + localStorage).'];
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persisted().then(function (already) {
+          if (already) return true;
+          return navigator.storage.persist();
+        }).then(function (granted) {
+          el.storageNote.textContent = parts[0] + (granted
+            ? ' Der Speicher ist als dauerhaft markiert.'
+            : ' Tipp: Ab und zu ein Backup speichern.');
+        }).catch(function () {
+          el.storageNote.textContent = parts[0];
+        });
+      } else {
+        el.storageNote.textContent = parts[0];
+      }
+    }
+
+    loadState().then(function (loaded) {
+      state = loaded;
+      rollOverIfNeeded();
+      paintRepeatToggle();
+      render();
+      describeStorage();
+      save();
+    });
+
+    /* Service Worker – macht die App offline nutzbar */
+    if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('./sw.js').catch(function () {});
+      });
+    }
+  })();
+  </script>
+</body>
+</html>
