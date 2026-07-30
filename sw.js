@@ -1,6 +1,6 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [

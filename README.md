@@ -43,16 +43,30 @@ Safari öffnen → Teilen → *Zum Home-Bildschirm*. Das Symbol kommt aus
 
 ## Wie die Tage funktionieren
 
-- **Einmalige Tasks** bleiben stehen, bis du sie abhakst. Beim Tageswechsel
-  wandern nur die abgehakten in den Verlauf – offene bleiben in der Liste und
-  bekommen ein „seit X Tagen"-Label.
-- **Tägliche Tasks** kommen jeden Morgen unabgehakt zurück.
+Es gibt nur eine Art von Task. Sie bleibt stehen, bis du sie abhakst – über
+Tage und Wochen hinweg.
+
+- **Offene Tasks** werden beim Tageswechsel nie zurückgesetzt und nie
+  gelöscht. Ab dem zweiten Tag tragen sie ein „seit X Tagen"-Label.
+- **Abgehakte Tasks** verlassen die Liste sofort: kurze Bestätigung, dann
+  wandern sie in den Verlauf und bleiben dort dauerhaft. Unmittelbar danach
+  kannst du das über den Toast rückgängig machen.
 - Der Tageswechsel passiert automatisch um Mitternacht, auch wenn die App
   offen liegt. Gelöscht wird dabei nichts.
-- Die Konfetti-Animation kommt jedes Mal, wenn die Liste wieder komplett
-  abgehakt ist. Neue Task am selben Tag erledigen → neue Animation.
-- Der Streak zählt einen Tag, sobald du an dem Tag mindestens einmal alles
-  abgehakt hattest.
+- Die Konfetti-Animation kommt, wenn die letzte offene Task abgehakt ist und
+  die Liste leer wird. Neue Task hinzufügen und abhaken → neue Animation.
+
+## Fortschritt und Streak
+
+- **Fortschritt** zeigt das Tagespensum: `3/7` heisst drei heute erledigt,
+  vier noch offen. Der Balken zeigt denselben Anteil.
+- **Der Streak** zählt aufeinanderfolgende Tage mit mindestens einer
+  erledigten Task. Heute zählt mit, sobald du etwas abhakst – bis dahin hält
+  der gestrige Stand, damit er nicht um Mitternacht abreisst.
+
+Beide Werte werden bei jedem Rendern frisch aus dem Verlauf berechnet und
+nirgends fortgeschrieben. Dadurch heilen sie sich selbst, falls ein Gerät mal
+tagelang nicht geöffnet wurde.
 
 ## Wo die Daten liegen
 
@@ -64,6 +78,11 @@ Die Daten liegen auf dem jeweiligen Gerät. Für echte Synchronisation zwischen
 iPhone und Laptop bräuchte es einen Server (z. B. Supabase); die Speicherschicht
 in `index.html` (Abschnitt 1) ist so gebaut, dass dafür nur `save()` und
 `loadState()` ausgetauscht werden müssten.
+
+Ältere Stände werden beim Laden automatisch migriert: Aus dem früheren Typ
+„jeden Tag" werden normale Tasks, und was zu dem Zeitpunkt abgehakt war,
+wandert in den Verlauf. Das gilt auch für alte Backup-Dateien, die du über
+*Backup laden* zurückspielst.
 
 ## Anpassen
 

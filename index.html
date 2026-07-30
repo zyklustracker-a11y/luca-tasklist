@@ -197,13 +197,6 @@
       </div>
     </div>
 
-    <!-- Filter -->
-    <div id="filter-bar" class="mb-4 flex gap-1 rounded-2xl border border-white/5 bg-surface-800/60 p-1 text-sm">
-      <button type="button" data-filter="all" class="seg-btn flex-1 rounded-xl px-3 py-2 font-medium">Alle <span data-count="all" class="font-mono text-xs opacity-60"></span></button>
-      <button type="button" data-filter="open" class="seg-btn flex-1 rounded-xl px-3 py-2 font-medium">Offen <span data-count="open" class="font-mono text-xs opacity-60"></span></button>
-      <button type="button" data-filter="done" class="seg-btn flex-1 rounded-xl px-3 py-2 font-medium">Erledigt <span data-count="done" class="font-mono text-xs opacity-60"></span></button>
-    </div>
-
     <!-- Task list -->
     <ul id="habits-list" class="mb-4 space-y-3"></ul>
     <div id="empty-state" class="mb-4 hidden rounded-2xl border border-dashed border-white/10 bg-surface-800/40 px-6 py-10 text-center">
@@ -221,13 +214,8 @@
         <label for="new-habit-input" class="sr-only">Name der neuen Task</label>
         <input id="new-habit-input" type="text" maxlength="120" placeholder="Name der neuen Task…" enterkeyhint="done"
           class="w-full rounded-xl border border-white/10 bg-surface-700/80 px-4 py-3.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
-        <div class="flex gap-1 rounded-xl border border-white/5 bg-surface-900/60 p-1 text-sm" id="new-repeat-toggle">
-          <button type="button" data-repeat="once" class="seg-btn flex-1 rounded-lg px-3 py-2 font-medium">Einmalig</button>
-          <button type="button" data-repeat="daily" class="seg-btn flex-1 rounded-lg px-3 py-2 font-medium">Jeden Tag</button>
-        </div>
         <p class="text-xs leading-relaxed text-slate-500">
-          <span class="text-slate-400">Einmalig:</span> bleibt stehen, bis du sie abhakst.
-          <span class="text-slate-400">Jeden Tag:</span> kommt morgen frisch zurück.
+          Die Task bleibt stehen, bis du sie abhakst – auch über Tage hinweg.
         </p>
         <div class="flex gap-2">
           <button id="confirm-add-habit-btn" type="button"
@@ -242,17 +230,7 @@
       </div>
     </section>
 
-    <!-- Cleanup -->
-    <button id="cleanup-btn" type="button"
-      class="group w-full rounded-2xl border border-accent/30 bg-gradient-to-r from-accent-muted/50 to-surface-700 px-6 py-4 font-semibold text-accent-glow shadow-glow transition-all duration-300 hover:border-accent hover:from-accent/20 hover:to-accent-muted/60 hover:text-white active:scale-[0.98]">
-      <span class="flex items-center justify-center gap-2">
-        <svg class="h-5 w-5 transition-transform duration-300 group-hover:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        Erledigte aufräumen
-      </span>
-    </button>
-    <p id="new-day-hint" class="mt-3 text-center text-xs text-slate-600"></p>
+    <p id="new-day-hint" class="text-center text-xs text-slate-600"></p>
 
     <!-- Verlauf -->
     <section class="mt-10">
@@ -313,9 +291,11 @@
     const DB_NAME = 'lucaTasks';
     const DB_STORE = 'kv';
     const STATE_KEY = 'state';
+    // Der Schlüssel bleibt bewusst auf .v3 – so findet die neue Fassung die
+    // Daten der alten wieder und migriert sie beim Laden.
     const LS_KEY = 'lucaTasks.v3';
     const LEGACY_LS_KEY = 'lucaHabitTracker';
-    const SCHEMA_VERSION = 3;
+    const SCHEMA_VERSION = 4;
 
     let dbPromise = null;
     function openDB() {
@@ -399,13 +379,11 @@
       return {
         version: SCHEMA_VERSION,
         day: todayKey(),
-        streak: 0,
         bestStreak: 0,
-        perfectToday: false,
         celebrationsToday: 0,
-        tasks: [],
-        journal: [],   // jede erledigte Task, nach Datum – wird nie automatisch gelöscht
-        history: {},   // pro Tag: { done, total, perfect }
+        tasks: [],     // ausschliesslich offene Tasks – abgehakte wandern sofort ins Journal
+        journal: [],   // jede erledigte Task, nach Datum – wird nie gelöscht
+        history: {},   // Altbestand aus Version 3, wird nur noch angezeigt
       };
     }
 
@@ -413,32 +391,52 @@
       return String(text == null ? '' : text).replace(/\uFFFD/g, '').trim();
     }
 
+    /**
+     * Migration. Bringt jeden bisherigen Stand auf das aktuelle Modell:
+     * v1/v2 hiessen die Einträge "habits", v3 kannte zusätzlich den Typ
+     * "daily" und ein done-Flag. Beides entfällt – aus täglichen werden
+     * normale Tasks, und bereits abgehakte wandern in den Verlauf statt
+     * verlorenzugehen.
+     */
     function normalize(raw) {
       const base = emptyState();
       if (!raw || typeof raw !== 'object') return base;
 
-      // Alte Version (v1/v2): "habits" statt "tasks" – waren tägliche Gewohnheiten
       const list = Array.isArray(raw.tasks) ? raw.tasks : (Array.isArray(raw.habits) ? raw.habits : []);
-      const legacy = !Array.isArray(raw.tasks);
+      const fallbackDay = typeof raw.day === 'string' ? raw.day.slice(0, 10) : todayKey();
 
-      base.tasks = list.map(function (t) {
-        return {
-          id: t.id || newId(),
-          name: normalizeText(t.name) || 'Unbenannt',
-          done: !!t.done,
-          repeat: t.repeat === 'daily' || (legacy && t.repeat == null) ? 'daily' : 'once',
-          createdAt: String(t.createdAt || raw.day || todayKey()).slice(0, 10),
-          doneAt: t.doneAt ? String(t.doneAt).slice(0, 10) : null,
-        };
-      }).filter(function (t) { return t.name; });
+      base.journal = Array.isArray(raw.journal)
+        ? raw.journal.filter(function (e) { return e && e.name && e.date; }).map(function (e) {
+            const date = String(e.date).slice(0, 10);
+            return {
+              id: e.id || newId(),
+              name: normalizeText(e.name) || 'Unbenannt',
+              date: date,
+              createdAt: e.createdAt ? String(e.createdAt).slice(0, 10) : date,
+            };
+          })
+        : [];
 
-      base.day = typeof raw.day === 'string' ? raw.day : todayKey();
-      base.streak = Number(raw.streak) || 0;
-      base.bestStreak = Math.max(Number(raw.bestStreak) || 0, base.streak);
-      base.perfectToday = !!raw.perfectToday;
+      list.forEach(function (t) {
+        const name = normalizeText(t && t.name);
+        if (!name) return;
+        const createdAt = String((t && t.createdAt) || fallbackDay).slice(0, 10);
+        if (t && t.done) {
+          base.journal.push({
+            id: (t && t.id) || newId(),
+            name: name,
+            date: String(t.doneAt || fallbackDay).slice(0, 10),
+            createdAt: createdAt,
+          });
+        } else {
+          base.tasks.push({ id: (t && t.id) || newId(), name: name, createdAt: createdAt });
+        }
+      });
+
+      base.day = fallbackDay;
       base.celebrationsToday = Number(raw.celebrationsToday) || 0;
-      base.journal = Array.isArray(raw.journal) ? raw.journal.filter(function (e) { return e && e.name && e.date; }) : [];
       base.history = (raw.history && typeof raw.history === 'object') ? raw.history : {};
+      base.bestStreak = Number(raw.bestStreak) || 0;   // alter Rekord bleibt Untergrenze
       return base;
     }
 
@@ -463,47 +461,19 @@
     /* ============================================================
        3. Tageswechsel – nichts wird gelöscht
        ============================================================ */
+    /**
+     * Tageswechsel. Offene Tasks bleiben unangetastet stehen – über Tage und
+     * Wochen hinweg. Erledigtes liegt bereits im Journal, es gibt also nichts
+     * zu verschieben und nichts zu löschen. Zu tun bleibt: das Datum merken,
+     * die Feier-Sprüche zurücksetzen und den Rekord nachziehen.
+     */
     function rollOverIfNeeded() {
       const today = todayKey();
       if (state.day === today) return false;
 
-      const prev = state.day;
-      const gap = Math.max(1, daysBetween(prev, today));
-
-      const total = state.tasks.length;
-      const done = state.tasks.filter(function (t) { return t.done; }).length;
-      const perfect = state.perfectToday || (total > 0 && done === total);
-
-      // Tag archivieren
-      state.history[prev] = { done: done, total: total, perfect: perfect };
-
-      // Erledigte ins Journal – nichts geht verloren
-      state.tasks.forEach(function (t) {
-        if (t.done) {
-          state.journal.push({ name: t.name, repeat: t.repeat, date: (t.doneAt || prev).slice(0, 10) });
-        }
-      });
-
-      // Einmalige erledigte Tasks verlassen die Liste, offene bleiben stehen.
-      // Tägliche Tasks kommen frisch (unabgehakt) zurück.
-      state.tasks = state.tasks.filter(function (t) {
-        return !(t.repeat === 'once' && t.done);
-      }).map(function (t) {
-        t.done = false;
-        t.doneAt = null;
-        return t;
-      });
-
-      // Streak
-      if (perfect) state.streak = gap === 1 ? state.streak + 1 : 1;
-      else state.streak = 0;
-      state.bestStreak = Math.max(state.bestStreak, state.streak);
-
       state.day = today;
-      state.perfectToday = false;
       state.celebrationsToday = 0;
-
-      if (state.journal.length > 1000) state.journal = state.journal.slice(-1000);
+      state.bestStreak = Math.max(state.bestStreak, computeBestStreak());
 
       save();
       return true;
@@ -520,16 +490,13 @@
       progressBar: document.getElementById('progress-bar'),
       streakCount: document.getElementById('streak-count'),
       streakLabel: document.getElementById('streak-label'),
-      filterBar: document.getElementById('filter-bar'),
       list: document.getElementById('habits-list'),
       emptyState: document.getElementById('empty-state'),
       showAddBtn: document.getElementById('show-add-habit-btn'),
       addForm: document.getElementById('add-habit-form'),
       newInput: document.getElementById('new-habit-input'),
-      newRepeatToggle: document.getElementById('new-repeat-toggle'),
       confirmAdd: document.getElementById('confirm-add-habit-btn'),
       cancelAdd: document.getElementById('cancel-add-habit-btn'),
-      cleanupBtn: document.getElementById('cleanup-btn'),
       hint: document.getElementById('new-day-hint'),
       historyToggle: document.getElementById('history-toggle'),
       historyPanel: document.getElementById('history-panel'),
@@ -550,12 +517,9 @@
     };
 
     let state = emptyState();
-    let filter = 'all';
     let editingId = null;
-    let newRepeat = 'once';
     let freshIds = new Set();
     let firstRender = true;
-    let lastDeleted = null;
 
     function escapeHtml(text) {
       return String(text)
@@ -568,14 +532,51 @@
     /* ============================================================
        5. Hilfsfunktionen
        ============================================================ */
-    function doneCount() { return state.tasks.filter(function (t) { return t.done; }).length; }
-    function openCount() { return state.tasks.length - doneCount(); }
-    function allDone() { return state.tasks.length > 0 && openCount() === 0; }
+    function shiftDay(key, delta) {
+      const d = parseKey(key);
+      d.setDate(d.getDate() + delta);
+      return dateKey(d);
+    }
 
-    function visibleTasks() {
-      if (filter === 'open') return state.tasks.filter(function (t) { return !t.done; });
-      if (filter === 'done') return state.tasks.filter(function (t) { return t.done; });
-      return state.tasks;
+    /** Alle Tage, an denen mindestens eine Task abgehakt wurde. */
+    function completedDates() {
+      const set = new Set();
+      state.journal.forEach(function (e) { set.add(e.date); });
+      return set;
+    }
+
+    function doneToday() {
+      const today = todayKey();
+      let n = 0;
+      state.journal.forEach(function (e) { if (e.date === today) n++; });
+      return n;
+    }
+
+    /**
+     * Aufeinanderfolgende Tage mit mindestens einer erledigten Task.
+     * Heute zählt erst mit, sobald etwas abgehakt ist – bis dahin hält der
+     * gestrige Stand, damit der Streak nicht um Mitternacht abreisst.
+     * Wird immer frisch aus dem Journal gerechnet und ist dadurch selbstheilend.
+     */
+    function currentStreak() {
+      const dates = completedDates();
+      const today = todayKey();
+      let cursor = dates.has(today) ? today : shiftDay(today, -1);
+      let n = 0;
+      while (dates.has(cursor)) { n++; cursor = shiftDay(cursor, -1); }
+      return n;
+    }
+
+    /** Längste je erreichte Serie, ebenfalls aus dem Journal. */
+    function computeBestStreak() {
+      const dates = Array.from(completedDates()).sort();
+      let best = 0, run = 0, prev = null;
+      dates.forEach(function (d) {
+        run = (prev && daysBetween(prev, d) === 1) ? run + 1 : 1;
+        if (run > best) best = run;
+        prev = d;
+      });
+      return best;
     }
 
     function formatDayLabel(key) {
@@ -667,7 +668,6 @@
       const idx = Math.min(state.celebrationsToday, CELEBRATIONS.length - 1);
       const msg = CELEBRATIONS[idx];
       state.celebrationsToday += 1;
-      state.perfectToday = true;
       save();
 
       el.celebrationTitle.textContent = msg.title;
@@ -698,64 +698,42 @@
 
     el.overlay.addEventListener('click', hideCelebration);
 
-    /**
-     * Führt eine Änderung aus und feiert, sobald der Tag dadurch
-     * (wieder) komplett ist. Neue Tasks am selben Tag lösen die
-     * Animation erneut aus.
-     */
-    function mutate(fn) {
-      const before = allDone();
-      fn();
-      save();
-      if (!before && allDone()) celebrate();
-    }
-
     /* ============================================================
        8. Rendern
        ============================================================ */
     function renderStats() {
-      const done = doneCount();
-      const total = state.tasks.length;
+      const done = doneToday();
+      const open = state.tasks.length;
+      const total = done + open;                 // Tagespensum: heute geschafft plus noch offen
       const pct = total ? Math.round((done / total) * 100) : 0;
+
+      const streak = currentStreak();
+      if (streak > state.bestStreak) { state.bestStreak = streak; save(); }
 
       el.weekdayBadge.textContent = new Date().toLocaleDateString('de-CH', { weekday: 'long' });
       el.greeting.textContent = greetingText();
       el.progressText.textContent = done + '/' + total;
       el.progressPercent.textContent = pct + '%';
       el.progressBar.style.width = pct + '%';
-      el.streakCount.textContent = state.streak;
+      el.streakCount.textContent = streak;
       el.streakLabel.textContent = 'Rekord: ' + state.bestStreak + (state.bestStreak === 1 ? ' Tag' : ' Tage');
 
-      const open = openCount();
       if (total === 0) {
-        el.hint.textContent = 'Noch keine Tasks für heute.';
+        el.hint.textContent = 'Noch keine Tasks – füg unten deine erste hinzu.';
       } else if (open === 0) {
-        el.hint.textContent = 'Alles erledigt. Erledigte Tasks wandern automatisch um Mitternacht in den Verlauf.';
+        el.hint.textContent = 'Alles abgearbeitet. Erledigtes findest du im Verlauf.';
       } else {
         el.hint.textContent = open + (open === 1 ? ' Task' : ' Tasks') + ' noch offen';
       }
       el.hint.classList.toggle('text-accent/70', total > 0 && open === 0);
 
-      el.filterBar.querySelector('[data-count="all"]').textContent = total ? total : '';
-      el.filterBar.querySelector('[data-count="open"]').textContent = open ? open : '';
-      el.filterBar.querySelector('[data-count="done"]').textContent = done ? done : '';
-
-      Array.prototype.forEach.call(el.filterBar.querySelectorAll('[data-filter]'), function (btn) {
-        const active = btn.dataset.filter === filter;
-        btn.className = 'seg-btn flex-1 rounded-xl px-3 py-2 font-medium ' +
-          (active ? 'bg-accent/15 text-accent-glow shadow-[inset_0_0_0_1px_rgba(34,197,94,0.25)]' : 'text-slate-400 hover:text-slate-200');
-      });
-
-      const totalDone = state.journal.length + doneCount();
+      const totalDone = state.journal.length;
       el.historySummary.textContent = totalDone
         ? totalDone + (totalDone === 1 ? ' Task' : ' Tasks') + ' abgehakt – nichts davon wird gelöscht'
         : 'Hier landet alles, was du abhakst';
     }
 
-    function repeatBadge(task) {
-      if (task.repeat === 'daily') {
-        return '<span class="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent/80">täglich</span>';
-      }
+    function ageBadge(task) {
       const age = daysBetween(task.createdAt, todayKey());
       if (age >= 1) {
         return '<span class="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400/80">seit ' + age + (age === 1 ? ' Tag' : ' Tagen') + '</span>';
@@ -776,12 +754,6 @@
           '<div class="' + rowClasses.replace('flex items-center', 'block') + '" data-id="' + task.id + '">' +
             '<input type="text" class="task-edit-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
               'data-id="' + task.id + '" value="' + escapeHtml(task.name) + '" maxlength="120" enterkeyhint="done" aria-label="Task bearbeiten" />' +
-            '<div class="mt-3 flex gap-1 rounded-xl border border-white/5 bg-surface-900/60 p-1 text-xs" data-edit-repeat="' + task.id + '">' +
-              '<button type="button" data-action="set-repeat" data-repeat="once" data-id="' + task.id + '" class="seg-btn flex-1 rounded-lg px-2 py-1.5 font-medium ' +
-                (task.repeat === 'once' ? 'bg-accent/15 text-accent-glow' : 'text-slate-400') + '">Einmalig</button>' +
-              '<button type="button" data-action="set-repeat" data-repeat="daily" data-id="' + task.id + '" class="seg-btn flex-1 rounded-lg px-2 py-1.5 font-medium ' +
-                (task.repeat === 'daily' ? 'bg-accent/15 text-accent-glow' : 'text-slate-400') + '">Jeden Tag</button>' +
-            '</div>' +
             '<div class="mt-3 flex gap-2">' +
               '<button type="button" data-action="save" data-id="' + task.id + '" class="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">Speichern</button>' +
               '<button type="button" data-action="cancel" data-id="' + task.id + '" class="rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:text-slate-200">Abbrechen</button>' +
@@ -794,11 +766,11 @@
         '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
           '<span class="flex shrink-0 items-center self-center">' +
             '<input type="checkbox" class="habit-checkbox m-0 block self-center" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
-              (task.done ? 'checked' : '') + ' aria-label="' + escapeHtml(task.name) + ' abhaken" />' +
+              'aria-label="' + escapeHtml(task.name) + ' abhaken" />' +
           '</span>' +
           '<label for="cb-' + task.id + '" class="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">' +
-            '<span class="habit-label break-words text-base font-medium ' + (task.done ? 'done' : 'text-slate-200') + '">' + escapeHtml(task.name) + '</span>' +
-            repeatBadge(task) +
+            '<span class="habit-label break-words text-base font-medium text-slate-200">' + escapeHtml(task.name) + '</span>' +
+            ageBadge(task) +
           '</label>' +
           '<div class="flex shrink-0 items-center gap-0.5">' +
             '<button type="button" class="rounded-lg p-2 text-slate-400 transition hover:bg-white/5 hover:text-accent-glow" data-action="edit" data-id="' + task.id + '" title="Bearbeiten" aria-label="Bearbeiten">' +
@@ -813,22 +785,19 @@
     }
 
     function renderList() {
-      const tasks = visibleTasks();
+      const tasks = state.tasks;
       el.list.innerHTML = tasks.map(taskRow).join('');
       el.emptyState.classList.toggle('hidden', tasks.length > 0);
 
       if (tasks.length === 0) {
         const p = el.emptyState.querySelector('p');
         const sub = el.emptyState.querySelectorAll('p')[1];
-        if (state.tasks.length === 0) {
-          p.textContent = 'Noch nichts geplant';
-          sub.textContent = 'Füg unten deine erste Task für heute hinzu.';
-        } else if (filter === 'open') {
-          p.textContent = 'Nichts mehr offen';
-          sub.textContent = 'Alles abgehakt. Neue Task hinzufügen?';
+        if (doneToday() > 0) {
+          p.textContent = 'Alles abgearbeitet';
+          sub.textContent = 'Nichts mehr offen. Noch etwas hinzufügen?';
         } else {
-          p.textContent = 'Noch nichts erledigt';
-          sub.textContent = 'Hak deine erste Task von heute ab.';
+          p.textContent = 'Noch nichts geplant';
+          sub.textContent = 'Füg unten deine erste Task hinzu.';
         }
       }
 
@@ -859,14 +828,13 @@
         return map.get(date);
       }
       state.journal.forEach(function (entry) { ensure(entry.date).items.push(entry); });
+      // Altbestand aus Version 3 bleibt sichtbar, auch wenn dort nur Zahlen stehen
       Object.keys(state.history).forEach(function (d) { ensure(d).stats = state.history[d]; });
 
-      const today = todayKey();
-      state.tasks.filter(function (t) { return t.done; }).forEach(function (t) {
-        ensure(today).items.push({ name: t.name, repeat: t.repeat, date: today });
+      // Neuester Tag zuerst, vollständig – nichts wird abgeschnitten
+      return Array.from(map.values()).sort(function (a, b) {
+        return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
       });
-
-      return Array.from(map.values()).sort(function (a, b) { return b.date < a.date ? -1 : 1; }).slice(0, 60);
     }
 
     function renderHistory() {
@@ -878,9 +846,9 @@
       }
       el.historyPanel.innerHTML = groups.map(function (g) {
         const perfect = g.stats && g.stats.perfect;
-        const statsLine = g.stats
-          ? g.stats.done + '/' + g.stats.total + ' erledigt'
-          : g.items.length + (g.items.length === 1 ? ' Task' : ' Tasks') + ' erledigt';
+        const statsLine = g.items.length
+          ? g.items.length + (g.items.length === 1 ? ' Task' : ' Tasks') + ' erledigt'
+          : (g.stats ? g.stats.done + '/' + g.stats.total + ' erledigt' : 'Nichts abgehakt');
         return '<div class="rounded-2xl border border-white/5 bg-surface-800/50 px-5 py-4">' +
           '<div class="flex items-baseline justify-between gap-3">' +
             '<p class="text-sm font-semibold text-slate-200">' + escapeHtml(formatDayLabel(g.date)) + '</p>' +
@@ -907,54 +875,100 @@
     /* ============================================================
        10. Aktionen
        ============================================================ */
-    function addTask(name, repeat) {
+    function addTask(name) {
       const clean = normalizeText(name);
       if (!clean) {
         el.newInput.focus();
         showToast('Gib der Task noch einen Namen.');
         return false;
       }
-      const task = {
-        id: newId(),
-        name: clean,
-        done: false,
-        repeat: repeat === 'daily' ? 'daily' : 'once',
-        createdAt: todayKey(),
-        doneAt: null,
-      };
+      const task = { id: newId(), name: clean, createdAt: todayKey() };
       freshIds.add(task.id);
       state.tasks.push(task);
       save();
-      if (filter === 'done') filter = 'all';
       render();
       showToast('„' + clean + '“ hinzugefügt');
       return true;
     }
 
+    /** Position einer Task in der Liste, frisch ermittelt statt gemerkt. */
+    function indexOfTask(id) {
+      return state.tasks.findIndex(function (t) { return t.id === id; });
+    }
+
+    /**
+     * Setzt eine Task wieder an ihren Platz. Jeder Aufruf trägt seine eigene
+     * Task mit sich – dadurch können sich zwei schnell aufeinanderfolgende
+     * Aktionen nicht mehr gegenseitig überschreiben.
+     */
+    function restoreTask(task, position) {
+      if (indexOfTask(task.id) !== -1) return;         // schon zurück, nichts zu tun
+      state.tasks.splice(Math.min(position, state.tasks.length), 0, task);
+      freshIds.add(task.id);
+      save();
+      render();
+    }
+
+    /** Hakt eine Task ab: kurze Bestätigung, dann raus aus der Liste und
+        dauerhaft in den Verlauf. Direkt danach ist Rückgängig möglich. */
+    function completeTask(id) {
+      const position = indexOfTask(id);
+      if (position === -1) return;
+      const task = state.tasks[position];
+      if (editingId === id) editingId = null;
+
+      const row = el.list.querySelector('.habit-row[data-id="' + id + '"]');
+      const checkbox = row ? row.querySelector('.habit-checkbox') : null;
+      const label = row ? row.querySelector('.habit-label') : null;
+      if (label) label.classList.add('done');
+      if (checkbox) checkbox.classList.add('pop');
+      if (row) row.classList.add('just-checked');
+
+      const linger = reduceMotion ? 0 : 460;
+      setTimeout(function () {
+        if (row) row.classList.add('leaving');
+        setTimeout(function () {
+          const i = indexOfTask(id);                   // Index frisch bestimmen
+          if (i === -1) return;
+          state.tasks.splice(i, 1);
+          const entry = { id: task.id, name: task.name, date: todayKey(), createdAt: task.createdAt };
+          state.journal.push(entry);
+          save();
+          render();
+
+          // Konfetti, sobald die letzte offene Task erledigt ist. Kommt eine
+          // neue dazu und wird abgehakt, feiert es erneut.
+          if (state.tasks.length === 0) celebrate();
+
+          showToast('„' + task.name + '“ erledigt', 'Rückgängig', function () {
+            const at = state.journal.lastIndexOf(entry);
+            if (at !== -1) state.journal.splice(at, 1);
+            hideCelebration();
+            restoreTask(task, position);
+          });
+        }, reduceMotion ? 0 : 200);
+      }, linger);
+    }
+
     function deleteTask(id) {
-      const index = state.tasks.findIndex(function (t) { return t.id === id; });
-      if (index === -1) return;
-      const task = state.tasks[index];
-      lastDeleted = { task: task, index: index };
+      const position = indexOfTask(id);
+      if (position === -1) return;
+      const task = state.tasks[position];
       if (editingId === id) editingId = null;
 
       const row = el.list.querySelector('.habit-row[data-id="' + id + '"]');
       if (row) row.classList.add('leaving');
 
       setTimeout(function () {
-        mutate(function () {
-          state.tasks.splice(index, 1);
-        });
+        const i = indexOfTask(id);                     // Index frisch bestimmen
+        if (i === -1) return;
+        state.tasks.splice(i, 1);
+        save();
         render();
         showToast('„' + task.name + '“ gelöscht', 'Rückgängig', function () {
-          if (!lastDeleted) return;
-          state.tasks.splice(Math.min(lastDeleted.index, state.tasks.length), 0, lastDeleted.task);
-          freshIds.add(lastDeleted.task.id);
-          lastDeleted = null;
-          save();
-          render();
+          restoreTask(task, position);
         });
-      }, 180);
+      }, reduceMotion ? 0 : 180);
     }
 
     function saveEdit(id, rawName) {
@@ -974,64 +988,13 @@
       showToast('Gespeichert');
     }
 
-    function cleanupDone() {
-      const doneOnce = state.tasks.filter(function (t) { return t.done && t.repeat === 'once'; });
-      const doneDaily = state.tasks.filter(function (t) { return t.done && t.repeat === 'daily'; });
-
-      if (!doneOnce.length && !doneDaily.length) {
-        showToast('Noch nichts erledigt zum Aufräumen.');
-        return;
-      }
-      if (!doneOnce.length) {
-        showToast('Tägliche Tasks bleiben bis Mitternacht stehen.');
-        return;
-      }
-
-      doneOnce.forEach(function (t) {
-        state.journal.push({ name: t.name, repeat: t.repeat, date: (t.doneAt || todayKey()).slice(0, 10) });
-      });
-      state.tasks = state.tasks.filter(function (t) { return !(t.done && t.repeat === 'once'); });
-      save();
-      render();
-      showToast(doneOnce.length + (doneOnce.length === 1 ? ' Task' : ' Tasks') + ' im Verlauf abgelegt');
-    }
-
     /* ============================================================
        11. Events
        ============================================================ */
     el.list.addEventListener('change', function (e) {
       if (!e.target.classList.contains('habit-checkbox')) return;
-      const id = e.target.dataset.id;
-      const task = state.tasks.find(function (t) { return t.id === id; });
-      if (!task) return;
-
-      const row = e.target.closest('.habit-row');
-      const label = row ? row.querySelector('.habit-label') : null;
-
-      mutate(function () {
-        task.done = e.target.checked;
-        task.doneAt = task.done ? todayKey() : null;
-      });
-
-      if (label) label.classList.toggle('done', task.done);
-      if (task.done && row) {
-        e.target.classList.add('pop');
-        row.classList.add('just-checked');
-        setTimeout(function () {
-          row.classList.remove('just-checked');
-          e.target.classList.remove('pop');
-        }, 620);
-      }
-
-      renderStats();
-
-      // Bei aktivem Filter verschwindet die Zeile nach der Animation
-      if (filter !== 'all') {
-        setTimeout(function () {
-          if (row) row.classList.add('leaving');
-          setTimeout(renderList, 200);
-        }, 420);
-      }
+      if (!e.target.checked) return;                   // es stehen nur offene Tasks in der Liste
+      completeTask(e.target.dataset.id);
     });
 
     el.list.addEventListener('click', function (e) {
@@ -1050,26 +1013,12 @@
         const input = el.list.querySelector('.task-edit-input[data-id="' + id + '"]');
         return saveEdit(id, input ? input.value : '');
       }
-      if (action === 'set-repeat') {
-        const task = state.tasks.find(function (t) { return t.id === id; });
-        if (!task) return;
-        task.repeat = btn.dataset.repeat;
-        save();
-        renderList();
-      }
     });
 
     el.list.addEventListener('keydown', function (e) {
       if (!e.target.classList.contains('task-edit-input')) return;
       if (e.key === 'Enter') { e.preventDefault(); saveEdit(e.target.dataset.id, e.target.value); }
       if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderList(); }
-    });
-
-    el.filterBar.addEventListener('click', function (e) {
-      const btn = e.target.closest('[data-filter]');
-      if (!btn) return;
-      filter = btn.dataset.filter;
-      render();
     });
 
     function showAddForm() {
@@ -1085,25 +1034,10 @@
       el.newInput.value = '';
     }
 
-    function paintRepeatToggle() {
-      Array.prototype.forEach.call(el.newRepeatToggle.querySelectorAll('[data-repeat]'), function (btn) {
-        const active = btn.dataset.repeat === newRepeat;
-        btn.className = 'seg-btn flex-1 rounded-lg px-3 py-2 font-medium ' +
-          (active ? 'bg-accent/15 text-accent-glow shadow-[inset_0_0_0_1px_rgba(34,197,94,0.25)]' : 'text-slate-400 hover:text-slate-200');
-      });
-    }
-
-    el.newRepeatToggle.addEventListener('click', function (e) {
-      const btn = e.target.closest('[data-repeat]');
-      if (!btn) return;
-      newRepeat = btn.dataset.repeat;
-      paintRepeatToggle();
-    });
-
     el.showAddBtn.addEventListener('click', showAddForm);
     el.cancelAdd.addEventListener('click', hideAddForm);
     el.confirmAdd.addEventListener('click', function () {
-      if (addTask(el.newInput.value, newRepeat)) {
+      if (addTask(el.newInput.value)) {
         el.newInput.value = '';
         el.newInput.focus();
       }
@@ -1111,14 +1045,12 @@
     el.newInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (addTask(el.newInput.value, newRepeat)) {
+        if (addTask(el.newInput.value)) {
           el.newInput.value = '';
         }
       }
       if (e.key === 'Escape') hideAddForm();
     });
-
-    el.cleanupBtn.addEventListener('click', cleanupDone);
 
     /* ============================================================
        12. Backup
@@ -1168,7 +1100,7 @@
       if (rollOverIfNeeded()) {
         firstRender = true;
         render();
-        showToast('Neuer Tag – offene Tasks sind geblieben.');
+        showToast('Neuer Tag – deine offenen Tasks stehen weiterhin.');
       }
     }
 
@@ -1199,8 +1131,8 @@
 
     loadState().then(function (loaded) {
       state = loaded;
+      state.bestStreak = Math.max(state.bestStreak, computeBestStreak());
       rollOverIfNeeded();
-      paintRepeatToggle();
       render();
       describeStorage();
       save();
