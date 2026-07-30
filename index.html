@@ -16,6 +16,46 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Tasks" />
 
+  <!-- Kritisches CSS für den Splash-Screen. Bewusst VOR dem Tailwind-Script,
+       damit der Screen schon beim ersten Paint dasteht – ohne Aufblitzen der
+       noch ungestylten App und ohne Weiß, falls Tailwind noch lädt. -->
+  <style id="splash-boot">
+    html { background: #0a0f0d; }
+    html.splash-active, html.splash-active body { overflow: hidden; }
+    #splash {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      box-sizing: border-box;
+      padding: calc(env(safe-area-inset-top) + 1rem) calc(env(safe-area-inset-right) + 1rem)
+               calc(env(safe-area-inset-bottom) + 1rem) calc(env(safe-area-inset-left) + 1rem);
+      /* derselbe Verlauf wie im body – nahtloser Übergang */
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 197, 94, 0.12), transparent),
+        radial-gradient(ellipse 60% 40% at 100% 100%, rgba(34, 197, 94, 0.06), transparent),
+        #0a0f0d;
+      opacity: 1;
+      transition: opacity 500ms ease;
+      /* Notausstieg per CSS, falls das Skript nie läuft */
+      animation: splashFailsafe 0s linear 10s forwards;
+    }
+    #splash.is-hiding { opacity: 0; }
+    .splash-inner {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 1.75rem; width: min(78vw, 300px);
+    }
+    #splash svg { width: clamp(96px, 30vw, 128px); height: auto; display: block; }
+    .splash-track {
+      width: 100%; height: 6px; border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.08); overflow: hidden;
+    }
+    #splash-bar {
+      height: 100%; width: 0; border-radius: 9999px; background: #4ade80;
+      box-shadow: 0 0 12px rgba(74, 222, 128, 0.5);
+    }
+    @keyframes splashFailsafe { to { opacity: 0; visibility: hidden; pointer-events: none; } }
+    @media (prefers-reduced-motion: reduce) { #splash { transition: none; } }
+  </style>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -153,6 +193,111 @@
   </style>
 </head>
 <body class="min-h-screen overflow-y-auto font-sans text-slate-100 antialiased">
+  <!-- Splash-/Ladescreen. Steht als erstes im body, damit er sofort sichtbar
+       ist und die App verdeckt, bis sie vollständig geladen und gerendert ist. -->
+  <div id="splash" role="status" aria-live="polite" aria-label="App wird geladen">
+    <div class="splash-inner">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Task Tracker">
+        <rect width="160" height="160" rx="36" fill="#0d1512"/>
+        <circle cx="80" cy="80" r="46" fill="none" stroke="#1c3527" stroke-width="10"/>
+        <path d="M80 34 A46 46 0 1 1 40.2 103" fill="none" stroke="#4ade80" stroke-width="10" stroke-linecap="round"/>
+        <path d="M60 81 L74 95 L102 65" fill="none" stroke="#4ade80" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="splash-track"><div id="splash-bar"></div></div>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var root = document.documentElement;
+    var splash = document.getElementById('splash');
+    var bar = document.getElementById('splash-bar');
+    if (!splash || !bar) return;
+    root.classList.add('splash-active');
+
+    var reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+
+    var MIN_MS = 2500;     // so lange mindestens sichtbar
+    var SAFETY_MS = 6000;  // Notausstieg, falls das Laden hängt (z. B. IndexedDB blockiert)
+    var RAMP_MS = 450;     // Dauer der Schlussrampe auf 100 %
+    var now = function () { return (window.performance && performance.now) ? performance.now() : Date.now(); };
+    var start = now();
+
+    var progress = 0;   // aktueller Balkenwert – steigt ausschliesslich
+    var floor = 0;      // von Meilensteinen angehobene Untergrenze
+    var ceiling = 90;   // vor "bereit" nicht überschreiten, damit der Rest sichtbar bleibt
+    var ready = false, finishing = false, hidden = false;
+    var rampFrom = 0, rampStart = 0;
+
+    function paint(p) { bar.style.width = p.toFixed(1) + '%'; }
+
+    function frame() {
+      var t = now();
+      if (finishing) {
+        var k = Math.min(1, (t - rampStart) / RAMP_MS);
+        var eased = 1 - Math.pow(1 - k, 3);
+        var v = rampFrom + (100 - rampFrom) * eased;
+        if (v > progress) progress = v;
+        paint(progress);
+        if (k >= 1) { hide(); return; }
+      } else {
+        var elapsed = t - start;
+        var creep = ceiling * (1 - Math.exp(-elapsed / 1100)); // ruhiges Kriechen Richtung ceiling
+        var target = Math.max(creep, Math.min(floor, ceiling));
+        if (target > progress) progress = target;              // niemals rückwärts
+        paint(progress);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    function beginFinish() {
+      if (finishing) return;
+      finishing = true;
+      rampStart = now();
+      rampFrom = progress;
+      if (reduce) { progress = 100; paint(100); hide(); } // ohne Rampe direkt füllen
+    }
+
+    function tryFinish() {
+      if (finishing || !ready) return;
+      setTimeout(beginFinish, Math.max(0, MIN_MS - (now() - start)));
+    }
+
+    function hide() {
+      if (hidden) return;
+      hidden = true;
+      paint(100);
+      root.classList.remove('splash-active');
+      var remove = function () { if (splash.parentNode) splash.parentNode.removeChild(splash); };
+      if (reduce) { remove(); return; }
+      splash.classList.add('is-hiding');
+      splash.addEventListener('transitionend', remove, { once: true });
+      setTimeout(remove, 650); // Fallback, falls transitionend ausbleibt
+    }
+
+    // Haken für die App: Fortschritt melden bzw. "bereit" signalisieren.
+    window.__splashBump = function (v) { if (v > floor) floor = Math.min(v, ceiling); };
+    window.__splashReady = function () { if (!ready) { ready = true; tryFinish(); } };
+
+    window.__splashBump(12); // sofort eine erste sichtbare Bewegung
+    if (document.readyState === 'interactive' || document.readyState === 'complete') {
+      window.__splashBump(35);
+    } else {
+      document.addEventListener('DOMContentLoaded', function () { window.__splashBump(35); });
+    }
+    try {
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () { window.__splashBump(60); });
+      }
+    } catch (e) {}
+
+    requestAnimationFrame(frame);
+
+    // Egal was hängt: nach SAFETY_MS geht der Splash auf jeden Fall.
+    setTimeout(function () { ready = true; beginFinish(); }, SAFETY_MS);
+  })();
+  </script>
+
   <div class="safe-top safe-bottom mx-auto max-w-lg px-4 sm:px-6">
     <!-- Header -->
     <header class="mb-8 text-center animate-fade-up">
@@ -465,8 +610,20 @@
       return base;
     }
 
+    // Verhindert, dass ein blockierter IndexedDB-Zugriff ewig hängt: nach
+    // kurzer Frist wird abgebrochen und auf localStorage zurückgefallen.
+    function withTimeout(promise, ms) {
+      return new Promise(function (resolve, reject) {
+        const to = setTimeout(function () { reject(new Error('timeout')); }, ms);
+        promise.then(
+          function (v) { clearTimeout(to); resolve(v); },
+          function (e) { clearTimeout(to); reject(e); }
+        );
+      });
+    }
+
     function loadState() {
-      return idbGet(STATE_KEY)
+      return withTimeout(idbGet(STATE_KEY), 1500)
         .catch(function () { return null; })
         .then(function (fromDb) {
           if (fromDb) return fromDb;
@@ -1309,6 +1466,20 @@
       }
     }
 
+    // Splash-Übergabe: erst freigeben, wenn der erste Render mit den echten
+    // Tasks durch ist UND die Fonts stehen (letzteres gedeckelt, damit ein
+    // blockiertes CDN den Start nicht aufhält).
+    let splashAppReady = false, splashFontsReady = false;
+    function releaseSplash() {
+      if (splashAppReady && splashFontsReady && window.__splashReady) window.__splashReady();
+    }
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { splashFontsReady = true; releaseSplash(); });
+      setTimeout(function () { splashFontsReady = true; releaseSplash(); }, 3000);
+    } else {
+      splashFontsReady = true;
+    }
+
     loadState().then(function (loaded) {
       state = loaded;
       state.bestStreak = Math.max(state.bestStreak, computeBestStreak());
@@ -1317,6 +1488,13 @@
       describeStorage();
       paintReminder();
       save();
+    }).catch(function () {
+      // Notfall (z. B. IndexedDB blockiert): wenigstens mit leerem Zustand rendern
+      try { state = emptyState(); render(); describeStorage(); paintReminder(); } catch (e) {}
+    }).then(function () {
+      if (window.__splashBump) window.__splashBump(85);
+      splashAppReady = true;
+      releaseSplash();
     });
 
     /* Service Worker – macht die App offline nutzbar */

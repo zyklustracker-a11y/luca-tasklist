@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Task Tracker">
+  <rect width="160" height="160" rx="36" fill="#0d1512"/>
+  <circle cx="80" cy="80" r="46" fill="none" stroke="#1c3527" stroke-width="10"/>
+  <path d="M80 34 A46 46 0 1 1 40.2 103" fill="none" stroke="#4ade80" stroke-width="10" stroke-linecap="round"/>
+  <path d="M60 81 L74 95 L102 65" fill="none" stroke="#4ade80" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,6 +1,6 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [
@@ -12,6 +12,7 @@ const PRECACHE = [
   './icon-192.png',
   './icon-512.png',
   './icon-512-maskable.png',
+  './logo.svg',
 ];
 
 self.addEventListener('install', (event) => {
