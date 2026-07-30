@@ -1,6 +1,6 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [
@@ -30,6 +30,87 @@ self.addEventListener('activate', (event) => {
             .map((k) => caches.delete(k))
       ))
       .then(() => self.clients.claim())
+  );
+});
+
+/* ------------------------------------------------------------------
+   Tägliche Erinnerung.
+
+   Der Absender schickt nur einen leeren Anstoss. Den Text bauen wir hier
+   selbst, weil die Tasks ausschliesslich auf diesem Gerät liegen – so
+   steht die echte Zahl in der Benachrichtigung statt einer Floskel.
+   ------------------------------------------------------------------ */
+const DB_NAME = 'lucaTasks';
+const DB_STORE = 'kv';
+const STATE_KEY = 'state';
+
+function readState() {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+    // Falls der Push kommt, bevor die App je lief, legen wir dieselbe Struktur
+    // an wie index.html – sonst fehlt ihr später der Object Store.
+    try {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DB_STORE)) return done(null);
+        const get = db.transaction(DB_STORE, 'readonly').objectStore(DB_STORE).get(STATE_KEY);
+        get.onsuccess = () => done(get.result || null);
+        get.onerror = () => done(null);
+      };
+      req.onerror = () => done(null);
+      req.onblocked = () => done(null);
+    } catch (err) {
+      done(null);
+    }
+    setTimeout(() => done(null), 3000);
+  });
+}
+
+function reminderText(state) {
+  const open = state && Array.isArray(state.tasks) ? state.tasks.length : null;
+  if (open === null) {
+    return { title: 'Deine To-dos', body: 'Schau kurz rein, was heute ansteht.' };
+  }
+  if (open === 0) {
+    return { title: 'Nichts offen', body: 'Deine Liste ist leer. Geniess den Tag.' };
+  }
+  return {
+    title: open === 1 ? '1 offenes To-do' : open + ' offene To-dos',
+    body: 'Guten Morgen – nicht vergessen!',
+  };
+}
+
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    readState().then((state) => {
+      const text = reminderText(state);
+      return self.registration.showNotification(text.title, {
+        body: text.body,
+        icon: './icon-192.png',
+        badge: './favicon-32.png',
+        tag: 'daily-reminder',
+        renotify: true,
+        data: { url: './index.html' },
+      });
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) return client.focus();
+      }
+      return self.clients.openWindow('./index.html');
+    })
   );
 });
 

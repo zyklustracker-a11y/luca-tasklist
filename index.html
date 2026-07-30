@@ -247,6 +247,18 @@
       <div id="history-panel" class="mt-3 hidden space-y-3"></div>
     </section>
 
+    <!-- Erinnerung -->
+    <section class="mt-8 rounded-2xl border border-white/5 bg-surface-800/40 p-4">
+      <p class="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">Morgens erinnern</p>
+      <p id="reminder-status" class="mb-3 text-xs leading-relaxed text-slate-400">Status wird geprüft …</p>
+      <div class="flex flex-wrap gap-2">
+        <button id="reminder-enable" type="button" class="hidden rounded-xl border border-accent/30 bg-accent-muted/25 px-3 py-2 text-xs font-medium text-accent-glow transition hover:border-accent hover:text-white">Erinnerung aktivieren</button>
+        <button id="reminder-copy" type="button" class="hidden rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Abo-Code kopieren</button>
+      </div>
+      <textarea id="reminder-code" readonly rows="3" aria-label="Abo-Code für GitHub"
+        class="mt-3 hidden w-full resize-none rounded-xl border border-white/10 bg-surface-900/60 p-3 font-mono text-[10px] leading-relaxed text-slate-400"></textarea>
+    </section>
+
     <!-- Daten -->
     <section class="mt-8 rounded-2xl border border-white/5 bg-surface-800/40 p-4">
       <p class="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">Daten</p>
@@ -506,6 +518,10 @@
       importBtn: document.getElementById('import-btn'),
       importFile: document.getElementById('import-file'),
       storageNote: document.getElementById('storage-note'),
+      reminderStatus: document.getElementById('reminder-status'),
+      reminderEnable: document.getElementById('reminder-enable'),
+      reminderCopy: document.getElementById('reminder-copy'),
+      reminderCode: document.getElementById('reminder-code'),
       toast: document.getElementById('toast'),
       toastText: document.getElementById('toast-text'),
       toastAction: document.getElementById('toast-action'),
@@ -1094,7 +1110,120 @@
     });
 
     /* ============================================================
-       13. Tageswechsel im Hintergrund + Start
+       13. Tägliche Erinnerung
+
+       Der Ablauf: Dieses Gerät meldet sich beim Push-Dienst an und erhält
+       ein Abo. Dessen Code wird einmalig als Secret bei GitHub hinterlegt,
+       wo ein Zeitplan morgens einen leeren Anstoss schickt. Den Text der
+       Benachrichtigung baut der Service Worker – nur er kommt an die
+       Tasks heran und kann die echte Zahl nennen.
+       ============================================================ */
+    const VAPID_PUBLIC_KEY = 'BE9fLq3HvD6izUe-EjJBPnLK2AGoKN41v16z_5bRfeqjP1bj5rDpG6vLSl9ZT2D1Yt-a32Eg9WNg02lt63Y1v40';
+
+    function vapidKeyBytes(base64url) {
+      const padded = (base64url + '='.repeat((4 - (base64url.length % 4)) % 4))
+        .replace(/-/g, '+').replace(/_/g, '/');
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    }
+
+    function isStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches ||
+             window.navigator.standalone === true;
+    }
+
+    function isApple() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    function showSubscription(subscription) {
+      el.reminderCode.value = JSON.stringify(subscription);
+      el.reminderCode.classList.remove('hidden');
+      el.reminderCopy.classList.remove('hidden');
+      el.reminderEnable.classList.add('hidden');
+      el.reminderStatus.innerHTML =
+        'Erinnerung ist auf diesem Gerät aktiv. Damit sie auch kommt, wenn die App ' +
+        'geschlossen ist, muss dieser Abo-Code einmalig bei GitHub als Secret ' +
+        '<span class="font-mono text-slate-300">PUSH_SUBSCRIPTION</span> hinterlegt werden. ' +
+        'Details stehen im README.';
+    }
+
+    function paintReminder() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+        el.reminderStatus.textContent = isApple() && !isStandalone()
+          ? 'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen → Zum Home-Bildschirm. Danach hier erneut öffnen.'
+          : 'Dieser Browser kann keine Benachrichtigungen empfangen.';
+        return;
+      }
+      if (isApple() && !isStandalone()) {
+        el.reminderStatus.textContent =
+          'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen → Zum Home-Bildschirm. ' +
+          'Danach die App von dort öffnen und hier weitermachen.';
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        el.reminderStatus.textContent =
+          'Benachrichtigungen sind für diese App gesperrt. Das lässt sich nur in den ' +
+          'iOS-Einstellungen unter Mitteilungen wieder freigeben.';
+        return;
+      }
+
+      navigator.serviceWorker.ready
+        .then(function (reg) { return reg.pushManager.getSubscription(); })
+        .then(function (existing) {
+          if (existing) return showSubscription(existing);
+          el.reminderEnable.classList.remove('hidden');
+          el.reminderStatus.textContent =
+            'Einmal morgens um 9 Uhr eine Meldung mit der Zahl deiner offenen To-dos.';
+        })
+        .catch(function () {
+          el.reminderStatus.textContent = 'Der Status liess sich gerade nicht ermitteln.';
+        });
+    }
+
+    el.reminderEnable.addEventListener('click', function () {
+      // Die Abfrage muss aus einem Tippen heraus kommen, sonst lehnt iOS ab.
+      Notification.requestPermission().then(function (permission) {
+        if (permission !== 'granted') {
+          el.reminderStatus.textContent = 'Ohne Erlaubnis keine Erinnerung. Du kannst es jederzeit erneut versuchen.';
+          return;
+        }
+        return navigator.serviceWorker.ready.then(function (reg) {
+          return reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidKeyBytes(VAPID_PUBLIC_KEY),
+          });
+        }).then(function (subscription) {
+          showSubscription(subscription);
+          showToast('Erinnerung aktiviert');
+        });
+      }).catch(function () {
+        el.reminderStatus.textContent =
+          'Die Anmeldung hat nicht geklappt. Prüf, ob die App wirklich vom Home-Bildschirm aus geöffnet ist.';
+      });
+    });
+
+    el.reminderCopy.addEventListener('click', function () {
+      const text = el.reminderCode.value;
+      const fallback = function () {
+        el.reminderCode.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        showToast('Abo-Code markiert – jetzt kopieren');
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () {
+          showToast('Abo-Code kopiert');
+        }).catch(fallback);
+      } else {
+        fallback();
+      }
+    });
+
+    /* ============================================================
+       14. Tageswechsel im Hintergrund + Start
        ============================================================ */
     function checkDayChange() {
       if (rollOverIfNeeded()) {
@@ -1135,6 +1264,7 @@
       rollOverIfNeeded();
       render();
       describeStorage();
+      paintReminder();
       save();
     });
 

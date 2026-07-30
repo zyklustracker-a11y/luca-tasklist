@@ -15,6 +15,14 @@ icon-512-maskable.png     Android (randloses Symbol)
 README.md                 Diese Datei
 ```
 
+Dazu kommen zwei Dateien, die **nicht** zur Website gehören und von GitHub
+Pages ignoriert werden – sie steuern nur die tägliche Erinnerung:
+
+```
+.github/workflows/daily-reminder.yml   Zeitplan, der morgens anstösst
+scripts/send-reminder.mjs              Absender, ohne Fremdbibliotheken
+```
+
 ## Auf GitHub veröffentlichen
 
 **Vorher prüfen:** Beim Herunterladen hängt der Browser bei gleichnamigen
@@ -41,26 +49,51 @@ Safari öffnen → Teilen → *Zum Home-Bildschirm*. Das Symbol kommt aus
 `apple-touch-icon.png`, der Name darunter aus dem Meta-Tag
 `apple-mobile-web-app-title` in der `index.html`.
 
-## Tägliche Erinnerung
+## Tägliche Erinnerung um 9 Uhr
 
-Die App selbst schickt keine Benachrichtigungen und kann das auch nicht:
-Sie liegt auf GitHub Pages, und reines Datei-Hosting kann nichts zu einer
-bestimmten Uhrzeit auslösen. Echtes Web Push bräuchte zusätzlich einen
-Absender, der morgens aufwacht – und weil die Daten ausschliesslich auf dem
-Gerät liegen, wüsste der ohnehin nicht, wie viele Tasks offen sind.
+Die App schickt morgens eine Benachrichtigung mit der Zahl der offenen
+To-dos – auch wenn sie geschlossen ist.
 
-Die Erinnerung läuft deshalb über eine Automation auf dem iPhone:
+**Wie es zusammenhängt.** GitHub Pages liefert nur Dateien aus und kann
+nichts zu einer Uhrzeit auslösen. Den Anstoss gibt deshalb ein Zeitplan
+unter GitHub Actions (`.github/workflows/daily-reminder.yml`), der
+`scripts/send-reminder.mjs` startet. Das Skript schickt einen **leeren**
+Push – ganz ohne Inhalt. Den Text baut der Service Worker auf dem iPhone
+selbst, denn nur er kommt an die IndexedDB und weiss, wie viele Tasks offen
+sind. Der Absender erfährt nichts über deine Daten.
 
-1. **Kurzbefehle** öffnen → Reiter **Automation** → **+**
-2. Auslöser **Tageszeit**, Uhrzeit wählen, **Täglich**, dann **Weiter**
-3. **Aktion hinzufügen** → nach `Mitteilung` suchen → **Mitteilung anzeigen**
-4. Text eintippen, z. B. „Guten Morgen – deine To-dos warten."
-5. **Sofort ausführen** aktivieren, **Vor dem Ausführen fragen** ausschalten
+### Einrichtung, einmalig
 
-Die Mitteilung öffnet die App nicht direkt – iOS lässt Automationen nicht in
-eine Home-Bildschirm-Web-App springen. Nach dem Lesen also das Symbol
-antippen. Alternativ tut es ein täglich wiederkehrender Eintrag in der
-Erinnerungen-App genauso.
+1. **App vom Home-Bildschirm öffnen.** iOS erlaubt Web-Benachrichtigungen
+   ausschliesslich installierten Web-Apps, nicht im Safari-Tab.
+2. Unten bei **Morgens erinnern** auf **Erinnerung aktivieren** tippen und
+   die Rückfrage von iOS erlauben.
+3. Auf **Abo-Code kopieren** tippen.
+4. Im Repository unter *Settings → Secrets and variables → Actions* zwei
+   Secrets anlegen:
+   - `PUSH_SUBSCRIPTION` – der eben kopierte Abo-Code
+   - `VAPID_PRIVATE_KEY` – der private Schlüssel zum öffentlichen, der in
+     `index.html` und `scripts/send-reminder.mjs` steht
+5. Zum Testen unter *Actions → Tägliche Erinnerung → Run workflow* sofort
+   auslösen, statt bis morgen früh zu warten.
+
+### Betrieb
+
+Der Zeitplan läuft um 07:00 und 08:00 UTC. Das Skript sendet nur bei dem
+Lauf, bei dem es in `Europe/Zurich` gerade 9 Uhr ist – so stimmt die Zeit
+auch nach der Zeitumstellung, ohne dass etwas angepasst werden muss.
+
+Zwei Dinge können den Betrieb stoppen:
+
+- **Das Abo läuft ab.** Wird die App monatelang nicht geöffnet oder neu
+  installiert, verwirft Apple das Abo. Der Lauf schlägt dann mit HTTP 410
+  fehl. Abhilfe: App öffnen, Erinnerung erneut aktivieren, das Secret
+  `PUSH_SUBSCRIPTION` durch den neuen Code ersetzen.
+- **GitHub schaltet den Zeitplan ab**, wenn 60 Tage lang niemand etwas ins
+  Repository schiebt. Ein beliebiger Commit reicht, um ihn zu reaktivieren.
+
+Ausserdem feuert der Zeitplan bei GitHub oft 5 bis 30 Minuten später als
+eingetragen. Die Meldung kommt also nicht auf die Minute genau.
 
 ## Wie die Tage funktionieren
 

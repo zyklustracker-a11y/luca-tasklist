@@ -1,0 +1,35 @@
+name: Tägliche Erinnerung
+
+# Cron läuft in UTC und kennt keine Sommerzeit. Deshalb zwei Läufe, von denen
+# das Skript genau den nimmt, bei dem es in Europe/Zurich 9 Uhr ist:
+#   07:00 UTC = 09:00 Sommerzeit
+#   08:00 UTC = 09:00 Winterzeit
+on:
+  schedule:
+    - cron: '0 7,8 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Sofort senden, unabhängig von der Uhrzeit'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Anstoss senden
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          FORCE: ${{ inputs.force }}
+        run: node scripts/send-reminder.mjs
