@@ -49,7 +49,7 @@ Safari öffnen → Teilen → *Zum Home-Bildschirm*. Das Symbol kommt aus
 `apple-touch-icon.png`, der Name darunter aus dem Meta-Tag
 `apple-mobile-web-app-title` in der `index.html`.
 
-## Tägliche Erinnerung um 9 Uhr
+## Tägliche Erinnerung
 
 Die App schickt morgens eine Benachrichtigung mit der Zahl der offenen
 To-dos – auch wenn sie geschlossen ist.
@@ -62,26 +62,46 @@ Push – ganz ohne Inhalt. Den Text baut der Service Worker auf dem iPhone
 selbst, denn nur er kommt an die IndexedDB und weiss, wie viele Tasks offen
 sind. Der Absender erfährt nichts über deine Daten.
 
+### Ein- und Ausschalten
+
+In der App ganz unten bei **Morgens erinnern** steht ein Schalter. Er meldet
+dieses Gerät beim Push-Dienst an (ein) oder wieder ab (aus) – das passiert
+sofort und komplett auf dem Gerät.
+
 ### Einrichtung, einmalig
+
+Damit der Anstoss auch ankommt, wenn die App geschlossen ist, muss das Abo
+einmal bei GitHub hinterlegt werden:
 
 1. **App vom Home-Bildschirm öffnen.** iOS erlaubt Web-Benachrichtigungen
    ausschliesslich installierten Web-Apps, nicht im Safari-Tab.
-2. Unten bei **Morgens erinnern** auf **Erinnerung aktivieren** tippen und
-   die Rückfrage von iOS erlauben.
-3. Auf **Abo-Code kopieren** tippen.
-4. Im Repository unter *Settings → Secrets and variables → Actions* zwei
-   Secrets anlegen:
-   - `PUSH_SUBSCRIPTION` – der eben kopierte Abo-Code
-   - `VAPID_PRIVATE_KEY` – der private Schlüssel zum öffentlichen, der in
-     `index.html` und `scripts/send-reminder.mjs` steht
+2. Bei **Morgens erinnern** den Schalter einschalten und die Rückfrage von
+   iOS erlauben. Danach klappt darunter ein Einrichtungs-Code auf.
+3. Auf **Code kopieren** tippen.
+4. Im Repository unter *Settings → Secrets and variables → Actions* anlegen:
+   - Reiter **Secrets**: `PUSH_SUBSCRIPTION` – der eben kopierte Code
+   - Reiter **Secrets**: `VAPID_PRIVATE_KEY` – der private Schlüssel zum
+     öffentlichen, der in `index.html` und `scripts/send-reminder.mjs` steht
 5. Zum Testen unter *Actions → Tägliche Erinnerung → Run workflow* sofort
    auslösen, statt bis morgen früh zu warten.
 
+### Uhrzeit ändern
+
+Die Uhrzeit steht in der Repository-**Variable** `REMINDER_HOUR` (nicht
+Secret), einzutragen unter *Settings → Secrets and variables → Actions →
+Variables*: eine Zahl von 0 bis 23, in Ortszeit `Europe/Zurich`. Ohne
+Eintrag bleibt es bei **9 Uhr**. Die Zeitumstellung wird automatisch
+berücksichtigt.
+
+> Warum nicht direkt in der App? Die App kann dem GitHub-Zeitplan nicht
+> sagen, wann er laufen soll, und iOS lässt keine unsichtbaren Pushes zu
+> (jeder Push muss eine Meldung zeigen). Die Uhrzeit muss deshalb dort
+> stehen, wo gesendet wird – bei GitHub.
+
 ### Betrieb
 
-Der Zeitplan läuft um 07:00 und 08:00 UTC. Das Skript sendet nur bei dem
-Lauf, bei dem es in `Europe/Zurich` gerade 9 Uhr ist – so stimmt die Zeit
-auch nach der Zeitumstellung, ohne dass etwas angepasst werden muss.
+Der Zeitplan läuft stündlich (in UTC). Das Skript sendet nur bei dem Lauf,
+bei dem es in `Europe/Zurich` gerade `REMINDER_HOUR` ist.
 
 Zwei Dinge können den Betrieb stoppen:
 

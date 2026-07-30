@@ -1,12 +1,12 @@
 name: Tägliche Erinnerung
 
-# Cron läuft in UTC und kennt keine Sommerzeit. Deshalb zwei Läufe, von denen
-# das Skript genau den nimmt, bei dem es in Europe/Zurich 9 Uhr ist:
-#   07:00 UTC = 09:00 Sommerzeit
-#   08:00 UTC = 09:00 Winterzeit
+# Der Zeitplan läuft stündlich (in UTC). Das Skript sendet nur bei dem Lauf,
+# bei dem es in Europe/Zurich gerade die gewünschte Stunde ist – so lässt sich
+# die Uhrzeit frei über die Repository-Variable REMINDER_HOUR wählen, und die
+# Zeitumstellung wird automatisch berücksichtigt.
 on:
   schedule:
-    - cron: '0 7,8 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -31,5 +31,6 @@ jobs:
         env:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           PUSH_SUBSCRIPTION: ${{ secrets.PUSH_SUBSCRIPTION }}
+          REMINDER_HOUR: ${{ vars.REMINDER_HOUR }}
           FORCE: ${{ inputs.force }}
         run: node scripts/send-reminder.mjs

@@ -249,14 +249,27 @@
 
     <!-- Erinnerung -->
     <section class="mt-8 rounded-2xl border border-white/5 bg-surface-800/40 p-4">
-      <p class="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">Morgens erinnern</p>
-      <p id="reminder-status" class="mb-3 text-xs leading-relaxed text-slate-400">Status wird geprüft …</p>
-      <div class="flex flex-wrap gap-2">
-        <button id="reminder-enable" type="button" class="hidden rounded-xl border border-accent/30 bg-accent-muted/25 px-3 py-2 text-xs font-medium text-accent-glow transition hover:border-accent hover:text-white">Erinnerung aktivieren</button>
-        <button id="reminder-copy" type="button" class="hidden rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Abo-Code kopieren</button>
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0">
+          <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Morgens erinnern</p>
+          <p id="reminder-status" class="mt-1 text-xs leading-relaxed text-slate-400">Status wird geprüft …</p>
+        </div>
+        <button id="reminder-toggle" type="button" role="switch" aria-checked="false" aria-label="Erinnerung ein- oder ausschalten"
+          class="relative hidden h-7 w-12 shrink-0 rounded-full border border-white/10 bg-surface-700 transition-colors duration-200">
+          <span id="reminder-knob" class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-slate-400 shadow transition-transform duration-200"></span>
+        </button>
       </div>
-      <textarea id="reminder-code" readonly rows="3" aria-label="Abo-Code für GitHub"
-        class="mt-3 hidden w-full resize-none rounded-xl border border-white/10 bg-surface-900/60 p-3 font-mono text-[10px] leading-relaxed text-slate-400"></textarea>
+      <details id="reminder-setup" class="mt-3 hidden">
+        <summary class="cursor-pointer list-none text-xs text-slate-500 transition hover:text-slate-300">Einrichtungs-Code für GitHub anzeigen</summary>
+        <p class="mt-2 text-xs leading-relaxed text-slate-500">
+          Nur nötig, falls die Erinnerung neu eingerichtet werden muss: diesen Code bei
+          GitHub als Secret <span class="font-mono text-slate-400">PUSH_SUBSCRIPTION</span>
+          hinterlegen. Details stehen im README.
+        </p>
+        <textarea id="reminder-code" readonly rows="3" aria-label="Einrichtungs-Code für GitHub"
+          class="mt-2 w-full resize-none rounded-xl border border-white/10 bg-surface-900/60 p-3 font-mono text-[10px] leading-relaxed text-slate-400"></textarea>
+        <button id="reminder-copy" type="button" class="mt-1 rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Code kopieren</button>
+      </details>
     </section>
 
     <!-- Daten -->
@@ -519,7 +532,9 @@
       importFile: document.getElementById('import-file'),
       storageNote: document.getElementById('storage-note'),
       reminderStatus: document.getElementById('reminder-status'),
-      reminderEnable: document.getElementById('reminder-enable'),
+      reminderToggle: document.getElementById('reminder-toggle'),
+      reminderKnob: document.getElementById('reminder-knob'),
+      reminderSetup: document.getElementById('reminder-setup'),
       reminderCopy: document.getElementById('reminder-copy'),
       reminderCode: document.getElementById('reminder-code'),
       toast: document.getElementById('toast'),
@@ -1139,32 +1154,46 @@
              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
 
-    function showSubscription(subscription) {
-      el.reminderCode.value = JSON.stringify(subscription);
-      el.reminderCode.classList.remove('hidden');
-      el.reminderCopy.classList.remove('hidden');
-      el.reminderEnable.classList.add('hidden');
-      el.reminderStatus.innerHTML =
-        'Erinnerung ist auf diesem Gerät aktiv. Damit sie auch kommt, wenn die App ' +
-        'geschlossen ist, muss dieser Abo-Code einmalig bei GitHub als Secret ' +
-        '<span class="font-mono text-slate-300">PUSH_SUBSCRIPTION</span> hinterlegt werden. ' +
-        'Details stehen im README.';
+    let reminderBusy = false;
+
+    /** Schaltet die optische Stellung des Umschalters. */
+    function paintToggle(on) {
+      el.reminderToggle.classList.remove('hidden');
+      el.reminderToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+      el.reminderToggle.classList.toggle('bg-accent', on);
+      el.reminderToggle.classList.toggle('border-accent', on);
+      el.reminderToggle.classList.toggle('bg-surface-700', !on);
+      el.reminderKnob.classList.toggle('translate-x-5', on);
+      el.reminderKnob.classList.toggle('bg-white', on);
+      el.reminderKnob.classList.toggle('bg-slate-400', !on);
     }
 
-    function paintReminder() {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-        el.reminderStatus.textContent = isApple() && !isStandalone()
-          ? 'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen → Zum Home-Bildschirm. Danach hier erneut öffnen.'
-          : 'Dieser Browser kann keine Benachrichtigungen empfangen.';
-        return;
-      }
+    /** Nur beim frischen Anmelden nötig: den Abo-Code zum Hinterlegen zeigen. */
+    function revealSetup(subscription) {
+      el.reminderCode.value = JSON.stringify(subscription);
+      el.reminderSetup.classList.remove('hidden');
+      el.reminderSetup.open = true;
+    }
+
+    function reminderUnavailable() {
+      el.reminderToggle.classList.add('hidden');
+      el.reminderSetup.classList.add('hidden');
       if (isApple() && !isStandalone()) {
         el.reminderStatus.textContent =
           'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen → Zum Home-Bildschirm. ' +
-          'Danach die App von dort öffnen und hier weitermachen.';
-        return;
+          'Danach die App von dort öffnen.';
+      } else {
+        el.reminderStatus.textContent = 'Dieser Browser kann keine Benachrichtigungen empfangen.';
+      }
+    }
+
+    function paintReminder() {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window) ||
+          (isApple() && !isStandalone())) {
+        return reminderUnavailable();
       }
       if (Notification.permission === 'denied') {
+        el.reminderToggle.classList.add('hidden');
         el.reminderStatus.textContent =
           'Benachrichtigungen sind für diese App gesperrt. Das lässt sich nur in den ' +
           'iOS-Einstellungen unter Mitteilungen wieder freigeben.';
@@ -1174,19 +1203,19 @@
       navigator.serviceWorker.ready
         .then(function (reg) { return reg.pushManager.getSubscription(); })
         .then(function (existing) {
-          if (existing) return showSubscription(existing);
-          el.reminderEnable.classList.remove('hidden');
-          el.reminderStatus.textContent =
-            'Einmal morgens um 9 Uhr eine Meldung mit der Zahl deiner offenen To-dos.';
+          paintToggle(!!existing);
+          el.reminderStatus.textContent = existing
+            ? 'Aktiv – morgens eine Meldung mit der Zahl deiner offenen To-dos.'
+            : 'Aus. Tippen für eine tägliche Erinnerung an deine offenen To-dos.';
         })
         .catch(function () {
           el.reminderStatus.textContent = 'Der Status liess sich gerade nicht ermitteln.';
         });
     }
 
-    el.reminderEnable.addEventListener('click', function () {
+    function enableReminder() {
       // Die Abfrage muss aus einem Tippen heraus kommen, sonst lehnt iOS ab.
-      Notification.requestPermission().then(function (permission) {
+      return Notification.requestPermission().then(function (permission) {
         if (permission !== 'granted') {
           el.reminderStatus.textContent = 'Ohne Erlaubnis keine Erinnerung. Du kannst es jederzeit erneut versuchen.';
           return;
@@ -1197,13 +1226,35 @@
             applicationServerKey: vapidKeyBytes(VAPID_PUBLIC_KEY),
           });
         }).then(function (subscription) {
-          showSubscription(subscription);
+          paintToggle(true);
+          el.reminderStatus.textContent = 'Aktiv – morgens eine Meldung mit der Zahl deiner offenen To-dos.';
+          revealSetup(subscription);
           showToast('Erinnerung aktiviert');
         });
       }).catch(function () {
         el.reminderStatus.textContent =
           'Die Anmeldung hat nicht geklappt. Prüf, ob die App wirklich vom Home-Bildschirm aus geöffnet ist.';
       });
+    }
+
+    function disableReminder() {
+      return navigator.serviceWorker.ready
+        .then(function (reg) { return reg.pushManager.getSubscription(); })
+        .then(function (sub) { return sub ? sub.unsubscribe() : true; })
+        .then(function () {
+          paintToggle(false);
+          el.reminderSetup.classList.add('hidden');
+          el.reminderStatus.textContent = 'Aus. Tippen für eine tägliche Erinnerung an deine offenen To-dos.';
+          showToast('Erinnerung ausgeschaltet');
+        });
+    }
+
+    el.reminderToggle.addEventListener('click', function () {
+      if (reminderBusy) return;
+      reminderBusy = true;
+      const isOn = el.reminderToggle.getAttribute('aria-checked') === 'true';
+      const action = isOn ? disableReminder() : enableReminder();
+      Promise.resolve(action).catch(function () {}).then(function () { reminderBusy = false; });
     });
 
     el.reminderCopy.addEventListener('click', function () {
@@ -1211,11 +1262,11 @@
       const fallback = function () {
         el.reminderCode.select();
         try { document.execCommand('copy'); } catch (e) {}
-        showToast('Abo-Code markiert – jetzt kopieren');
+        showToast('Code markiert – jetzt kopieren');
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function () {
-          showToast('Abo-Code kopiert');
+          showToast('Code kopiert');
         }).catch(fallback);
       } else {
         fallback();

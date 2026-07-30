@@ -15,7 +15,17 @@ import crypto from 'node:crypto';
 const PUBLIC_KEY = 'BE9fLq3HvD6izUe-EjJBPnLK2AGoKN41v16z_5bRfeqjP1bj5rDpG6vLSl9ZT2D1Yt-a32Eg9WNg02lt63Y1v40';
 const CONTACT = 'mailto:luca.toriellolt@gmail.com';
 const TIMEZONE = 'Europe/Zurich';
-const SEND_HOUR = 9;
+
+// Uhrzeit der Erinnerung. Über die Repository-Variable REMINDER_HOUR (0–23)
+// einstellbar; ohne Angabe bleibt es bei 9 Uhr.
+const SEND_HOUR = (() => {
+  const raw = process.env.REMINDER_HOUR;
+  // Nicht gesetzte Variablen kommen als leerer String an – dann bei 9 bleiben,
+  // statt dass Number('') zu 0 (Mitternacht) wird.
+  if (raw == null || String(raw).trim() === '') return 9;
+  const v = Number(raw);
+  return Number.isInteger(v) && v >= 0 && v <= 23 ? v : 9;
+})();
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
