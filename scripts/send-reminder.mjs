@@ -57,6 +57,14 @@ async function main() {
   const raw = process.env.PUSH_SUBSCRIPTION;
   const force = process.env.FORCE === 'true';
 
+  // Erst die Uhrzeit prüfen: Von den beiden Läufen pro Tag ist immer nur
+  // einer der richtige, der andere soll gar nicht erst anschlagen.
+  const hour = localHour();
+  if (!force && hour !== SEND_HOUR) {
+    console.log(`Ortszeit ${hour} Uhr in ${TIMEZONE}, gesendet wird um ${SEND_HOUR} – nichts zu tun.`);
+    return;
+  }
+
   if (!privateD) {
     console.error('VAPID_PRIVATE_KEY fehlt. Secret im Repository hinterlegen.');
     process.exit(1);
@@ -64,12 +72,6 @@ async function main() {
   if (!raw) {
     console.error('PUSH_SUBSCRIPTION fehlt. Abo-Code aus der App als Secret hinterlegen.');
     process.exit(1);
-  }
-
-  const hour = localHour();
-  if (!force && hour !== SEND_HOUR) {
-    console.log(`Ortszeit ${hour} Uhr in ${TIMEZONE}, gesendet wird um ${SEND_HOUR} – nichts zu tun.`);
-    return;
   }
 
   let subscription;
