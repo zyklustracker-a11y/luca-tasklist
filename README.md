@@ -41,6 +41,27 @@ Safari öffnen → Teilen → *Zum Home-Bildschirm*. Das Symbol kommt aus
 `apple-touch-icon.png`, der Name darunter aus dem Meta-Tag
 `apple-mobile-web-app-title` in der `index.html`.
 
+## Tägliche Erinnerung
+
+Die App selbst schickt keine Benachrichtigungen und kann das auch nicht:
+Sie liegt auf GitHub Pages, und reines Datei-Hosting kann nichts zu einer
+bestimmten Uhrzeit auslösen. Echtes Web Push bräuchte zusätzlich einen
+Absender, der morgens aufwacht – und weil die Daten ausschliesslich auf dem
+Gerät liegen, wüsste der ohnehin nicht, wie viele Tasks offen sind.
+
+Die Erinnerung läuft deshalb über eine Automation auf dem iPhone:
+
+1. **Kurzbefehle** öffnen → Reiter **Automation** → **+**
+2. Auslöser **Tageszeit**, Uhrzeit wählen, **Täglich**, dann **Weiter**
+3. **Aktion hinzufügen** → nach `Mitteilung` suchen → **Mitteilung anzeigen**
+4. Text eintippen, z. B. „Guten Morgen – deine To-dos warten."
+5. **Sofort ausführen** aktivieren, **Vor dem Ausführen fragen** ausschalten
+
+Die Mitteilung öffnet die App nicht direkt – iOS lässt Automationen nicht in
+eine Home-Bildschirm-Web-App springen. Nach dem Lesen also das Symbol
+antippen. Alternativ tut es ein täglich wiederkehrender Eintrag in der
+Erinnerungen-App genauso.
+
 ## Wie die Tage funktionieren
 
 Es gibt nur eine Art von Task. Sie bleibt stehen, bis du sie abhakst – über
