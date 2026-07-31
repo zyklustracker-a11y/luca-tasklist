@@ -283,7 +283,14 @@
 
   <div class="safe-top safe-bottom mx-auto max-w-lg px-4 sm:px-6">
     <!-- Header -->
-    <header class="mb-8 text-center animate-fade-up">
+    <header class="relative mb-8 text-center animate-fade-up">
+      <button id="settings-btn" type="button" aria-label="Einstellungen öffnen"
+        class="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surface-800/70 text-slate-300 transition hover:border-accent/30 hover:text-accent-glow active:scale-95">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+        </svg>
+      </button>
       <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent-muted/30 px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-accent-glow">
         <span class="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-soft"></span>
         <span id="weekday-badge">Heute</span>
@@ -375,41 +382,83 @@
       <div id="history-panel" class="mt-3 hidden space-y-3"></div>
     </section>
 
-    <!-- Erinnerung -->
-    <section class="mt-8 rounded-2xl border border-white/5 bg-surface-800/40 p-4">
-      <div class="flex items-center justify-between gap-4">
-        <div class="min-w-0">
-          <p class="text-xs font-medium uppercase tracking-wider text-slate-500">Morgens erinnern</p>
-          <p id="reminder-status" class="mt-1 text-xs leading-relaxed text-slate-400">Status wird geprüft …</p>
-        </div>
-        <button id="reminder-toggle" type="button" role="switch" aria-checked="false" aria-label="Erinnerung ein- oder ausschalten"
-          class="relative hidden h-7 w-12 shrink-0 rounded-full border border-white/10 bg-surface-700 transition-colors duration-200">
-          <span id="reminder-knob" class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-slate-400 shadow transition-transform duration-200"></span>
-        </button>
-      </div>
-      <details id="reminder-setup" class="mt-3 hidden">
-        <summary class="cursor-pointer list-none text-xs text-slate-500 transition hover:text-slate-300">Einrichtungs-Code für GitHub anzeigen</summary>
-        <p class="mt-2 text-xs leading-relaxed text-slate-500">
-          Nur nötig, falls die Erinnerung neu eingerichtet werden muss: diesen Code bei
-          GitHub als Secret <span class="font-mono text-slate-400">PUSH_SUBSCRIPTION</span>
-          hinterlegen. Details stehen im README.
-        </p>
-        <textarea id="reminder-code" readonly rows="3" aria-label="Einrichtungs-Code für GitHub"
-          class="mt-2 w-full resize-none rounded-xl border border-white/10 bg-surface-900/60 p-3 font-mono text-[10px] leading-relaxed text-slate-400"></textarea>
-        <button id="reminder-copy" type="button" class="mt-1 rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Code kopieren</button>
-      </details>
-    </section>
+  </div>
 
-    <!-- Daten -->
-    <section class="mt-8 rounded-2xl border border-white/5 bg-surface-800/40 p-4">
-      <p class="mb-3 text-xs font-medium uppercase tracking-wider text-slate-500">Daten</p>
-      <div class="flex flex-wrap gap-2">
-        <button id="export-btn" type="button" class="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Backup speichern</button>
-        <button id="import-btn" type="button" class="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Backup laden</button>
-        <input id="import-file" type="file" accept="application/json,.json" class="hidden" />
+  <!-- Einstellungen -->
+  <div id="settings-modal" class="fixed inset-0 z-[90] hidden">
+    <div id="settings-backdrop" class="absolute inset-0 bg-black/60 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
+    <div class="absolute inset-0 flex items-end justify-center px-4 pt-10 sm:items-center sm:p-6"
+         style="padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))">
+      <div id="settings-panel"
+        class="relative flex max-h-[85vh] w-full max-w-lg translate-y-6 flex-col overflow-hidden rounded-3xl border border-white/10 bg-surface-800 opacity-0 shadow-card transition-all duration-300"
+        role="dialog" aria-modal="true" aria-label="Einstellungen">
+        <div class="flex items-center justify-between border-b border-white/5 px-5 py-4">
+          <h2 class="text-lg font-semibold text-white">Einstellungen</h2>
+          <button id="settings-close" type="button" aria-label="Einstellungen schließen"
+            class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-400 transition hover:border-white/20 hover:text-slate-200 active:scale-95">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="space-y-4 overflow-y-auto px-5 py-5">
+          <!-- Benachrichtigungen -->
+          <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-slate-200">Morgens erinnern</p>
+                <p id="reminder-status" class="mt-1 text-xs leading-relaxed text-slate-400">Status wird geprüft …</p>
+              </div>
+              <button id="reminder-toggle" type="button" role="switch" aria-checked="false" aria-label="Erinnerung ein- oder ausschalten"
+                class="relative hidden h-7 w-12 shrink-0 rounded-full border border-white/10 bg-surface-700 transition-colors duration-200">
+                <span id="reminder-knob" class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-slate-400 shadow transition-transform duration-200"></span>
+              </button>
+            </div>
+
+            <div id="reminder-time-row" class="mt-4 hidden items-center justify-between gap-4 border-t border-white/5 pt-4">
+              <div>
+                <label for="notify-time" class="text-sm text-slate-200">Uhrzeit</label>
+                <p class="mt-0.5 text-xs text-slate-500">Wann die Meldung morgens kommt.</p>
+              </div>
+              <input id="notify-time" type="time" value="09:00" step="60"
+                class="rounded-xl border border-white/10 bg-surface-700 px-3 py-2 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+            </div>
+
+            <button id="reminder-test" type="button"
+              class="mt-3 hidden w-full rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow active:scale-[0.99]">
+              Test-Benachrichtigung senden
+            </button>
+          </section>
+
+          <!-- Google-Konto (Platzhalter, kommt später mit Firebase) -->
+          <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-slate-300">Google-Konto</p>
+                <p class="mt-1 text-xs leading-relaxed text-slate-500">Anmelden und zwischen Geräten synchronisieren.</p>
+              </div>
+              <span class="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-slate-500">Kommt bald</span>
+            </div>
+            <button type="button" disabled aria-disabled="true"
+              class="mt-3 w-full cursor-not-allowed rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-500 opacity-60">
+              Mit Google anmelden
+            </button>
+          </section>
+
+          <!-- Daten -->
+          <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
+            <p class="mb-3 text-sm font-semibold text-slate-200">Daten</p>
+            <div class="flex flex-wrap gap-2">
+              <button id="export-btn" type="button" class="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Backup speichern</button>
+              <button id="import-btn" type="button" class="rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-accent/30 hover:text-accent-glow">Backup laden</button>
+              <input id="import-file" type="file" accept="application/json,.json" class="hidden" />
+            </div>
+            <p id="storage-note" class="mt-3 text-xs leading-relaxed text-slate-600"></p>
+          </section>
+        </div>
       </div>
-      <p id="storage-note" class="mt-3 text-xs leading-relaxed text-slate-600"></p>
-    </section>
+    </div>
   </div>
 
   <!-- Celebration -->
@@ -537,7 +586,24 @@
         tasks: [],     // ausschliesslich offene Tasks – abgehakte wandern sofort ins Journal
         journal: [],   // jede erledigte Task, nach Datum – wird nie gelöscht
         history: {},   // Altbestand aus Version 3, wird nur noch angezeigt
+        settings: defaultSettings(),
       };
+    }
+
+    // Einstellungen der Erinnerung. subscriberId identifiziert dieses Gerät
+    // beim Worker (ein Eintrag pro Gerät im KV-Speicher).
+    function defaultSettings() {
+      return { notifyHour: 9, notifyMinute: 0, subscriberId: null };
+    }
+
+    function sanitizeSettings(raw) {
+      const s = defaultSettings();
+      if (raw && typeof raw === 'object') {
+        if (Number.isInteger(raw.notifyHour) && raw.notifyHour >= 0 && raw.notifyHour <= 23) s.notifyHour = raw.notifyHour;
+        if (Number.isInteger(raw.notifyMinute) && raw.notifyMinute >= 0 && raw.notifyMinute <= 59) s.notifyMinute = raw.notifyMinute;
+        if (typeof raw.subscriberId === 'string' && raw.subscriberId) s.subscriberId = raw.subscriberId;
+      }
+      return s;
     }
 
     function normalizeText(text) {
@@ -590,6 +656,7 @@
       base.celebrationsToday = Number(raw.celebrationsToday) || 0;
       base.history = (raw.history && typeof raw.history === 'object') ? raw.history : {};
       base.bestStreak = Number(raw.bestStreak) || 0;   // alter Rekord bleibt Untergrenze
+      base.settings = sanitizeSettings(raw.settings);
       return base;
     }
 
@@ -674,9 +741,14 @@
       reminderStatus: document.getElementById('reminder-status'),
       reminderToggle: document.getElementById('reminder-toggle'),
       reminderKnob: document.getElementById('reminder-knob'),
-      reminderSetup: document.getElementById('reminder-setup'),
-      reminderCopy: document.getElementById('reminder-copy'),
-      reminderCode: document.getElementById('reminder-code'),
+      reminderTimeRow: document.getElementById('reminder-time-row'),
+      notifyTime: document.getElementById('notify-time'),
+      reminderTest: document.getElementById('reminder-test'),
+      settingsBtn: document.getElementById('settings-btn'),
+      settingsModal: document.getElementById('settings-modal'),
+      settingsPanel: document.getElementById('settings-panel'),
+      settingsBackdrop: document.getElementById('settings-backdrop'),
+      settingsClose: document.getElementById('settings-close'),
       toast: document.getElementById('toast'),
       toastText: document.getElementById('toast-text'),
       toastAction: document.getElementById('toast-action'),
@@ -1265,14 +1337,23 @@
     });
 
     /* ============================================================
-       13. Tägliche Erinnerung
+       13. Tägliche Erinnerung + Einstellungen-Menü
 
        Der Ablauf: Dieses Gerät meldet sich beim Push-Dienst an und erhält
-       ein Abo. Dessen Code wird einmalig als Secret bei GitHub hinterlegt,
-       wo ein Zeitplan morgens einen leeren Anstoss schickt. Den Text der
-       Benachrichtigung baut der Service Worker – nur er kommt an die
-       Tasks heran und kann die echte Zahl nennen.
+       ein Abo. Das Abo samt gewünschter Uhrzeit und Zeitzone schickt die App
+       automatisch an den Cloudflare Worker (siehe Ordner worker/), der es in
+       KV speichert. Ein Cron-Trigger dort prüft regelmässig, für wen es Zeit
+       ist, und schickt einen LEEREN Anstoss. Den sichtbaren Text baut der
+       Service Worker auf dem Gerät selbst – nur er kommt an die Tasks heran
+       und kann die echte Zahl offener To-dos nennen.
        ============================================================ */
+
+    // Adresse des Cloudflare Workers – nach dem Deploy eintragen, z. B.
+    // 'https://luca-tasklist-push.deinname.workers.dev' (ohne Schrägstrich am
+    // Ende). Solange leer, funktioniert alles auf dem Gerät, aber der Server
+    // kann nichts senden. Anleitung: worker/README.md.
+    const WORKER_URL = '';
+
     const VAPID_PUBLIC_KEY = 'BE9fLq3HvD6izUe-EjJBPnLK2AGoKN41v16z_5bRfeqjP1bj5rDpG6vLSl9ZT2D1Yt-a32Eg9WNg02lt63Y1v40';
 
     function vapidKeyBytes(base64url) {
@@ -1294,7 +1375,60 @@
              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
 
+    /** Eindeutige Geräte-Kennung – ein Eintrag pro Gerät im KV-Speicher. */
+    function ensureSubscriberId() {
+      if (!state.settings.subscriberId) {
+        state.settings.subscriberId = (crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'dev-' + Date.now().toString(36) + Math.random().toString(16).slice(2);
+        save();
+      }
+      return state.settings.subscriberId;
+    }
+
+    function currentTimeZone() {
+      try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+      catch (e) { return 'UTC'; }
+    }
+
+    function reminderActiveText() {
+      const h = String(state.settings.notifyHour).padStart(2, '0');
+      const m = String(state.settings.notifyMinute).padStart(2, '0');
+      return 'Aktiv – täglich um ' + h + ':' + m + ' Uhr.';
+    }
+
     let reminderBusy = false;
+
+    /** POST an den Worker, immer als abgefangenes { ok, status, data }. */
+    function workerPost(path, body) {
+      return fetch(WORKER_URL + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      });
+    }
+
+    /** Aktuelles Abo + Einstellungen zum Worker schicken (Uhrzeit/Zeitzone). */
+    function pushSettingsToWorker() {
+      if (!WORKER_URL) return Promise.resolve({ ok: false, skipped: 'no-url' });
+      return navigator.serviceWorker.ready
+        .then(function (reg) { return reg.pushManager.getSubscription(); })
+        .then(function (sub) {
+          if (!sub) return { ok: false, skipped: 'no-sub' };
+          return workerPost('/save', {
+            id: ensureSubscriberId(),
+            subscription: sub.toJSON(),
+            hour: state.settings.notifyHour,
+            minute: state.settings.notifyMinute,
+            tz: currentTimeZone(),
+            enabled: true,
+          });
+        });
+    }
 
     /** Schaltet die optische Stellung des Umschalters. */
     function paintToggle(on) {
@@ -1308,16 +1442,21 @@
       el.reminderKnob.classList.toggle('bg-slate-400', !on);
     }
 
-    /** Nur beim frischen Anmelden nötig: den Abo-Code zum Hinterlegen zeigen. */
-    function revealSetup(subscription) {
-      el.reminderCode.value = JSON.stringify(subscription);
-      el.reminderSetup.classList.remove('hidden');
-      el.reminderSetup.open = true;
+    function showTimeRow(show) {
+      el.reminderTimeRow.classList.toggle('hidden', !show);
+      el.reminderTimeRow.classList.toggle('flex', show);
+    }
+
+    function syncTimeInput() {
+      const h = String(state.settings.notifyHour).padStart(2, '0');
+      const m = String(state.settings.notifyMinute).padStart(2, '0');
+      el.notifyTime.value = h + ':' + m;
     }
 
     function reminderUnavailable() {
       el.reminderToggle.classList.add('hidden');
-      el.reminderSetup.classList.add('hidden');
+      showTimeRow(false);
+      el.reminderTest.classList.add('hidden');
       if (isApple() && !isStandalone()) {
         el.reminderStatus.textContent =
           'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen → Zum Home-Bildschirm. ' +
@@ -1328,25 +1467,31 @@
     }
 
     function paintReminder() {
+      syncTimeInput();
       if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window) ||
           (isApple() && !isStandalone())) {
         return reminderUnavailable();
       }
       if (Notification.permission === 'denied') {
         el.reminderToggle.classList.add('hidden');
+        showTimeRow(false);
+        el.reminderTest.classList.add('hidden');
         el.reminderStatus.textContent =
           'Benachrichtigungen sind für diese App gesperrt. Das lässt sich nur in den ' +
           'iOS-Einstellungen unter Mitteilungen wieder freigeben.';
         return;
       }
 
+      // Uhrzeit-Wahl steht immer offen; der Test-Button erst, wenn ein Abo besteht.
+      showTimeRow(true);
       navigator.serviceWorker.ready
         .then(function (reg) { return reg.pushManager.getSubscription(); })
         .then(function (existing) {
           paintToggle(!!existing);
+          el.reminderTest.classList.toggle('hidden', !existing);
           el.reminderStatus.textContent = existing
-            ? 'Aktiv – morgens eine Meldung mit der Zahl deiner offenen To-dos.'
-            : 'Aus. Tippen für eine tägliche Erinnerung an deine offenen To-dos.';
+            ? reminderActiveText()
+            : 'Aus. Antippen für eine tägliche Erinnerung an deine offenen To-dos.';
         })
         .catch(function () {
           el.reminderStatus.textContent = 'Der Status liess sich gerade nicht ermitteln.';
@@ -1365,10 +1510,24 @@
             userVisibleOnly: true,
             applicationServerKey: vapidKeyBytes(VAPID_PUBLIC_KEY),
           });
-        }).then(function (subscription) {
+        }).then(function () {
+          return pushSettingsToWorker();
+        }).then(function (result) {
           paintToggle(true);
-          el.reminderStatus.textContent = 'Aktiv – morgens eine Meldung mit der Zahl deiner offenen To-dos.';
-          revealSetup(subscription);
+          el.reminderTest.classList.remove('hidden');
+          if (!WORKER_URL) {
+            el.reminderStatus.textContent =
+              'Auf diesem Gerät aktiviert. Es fehlt noch die WORKER_URL im Code – ohne sie kann der Server nichts senden (siehe worker/README.md).';
+            showToast('Aktiviert – Worker-URL fehlt noch');
+            return;
+          }
+          if (result && result.ok === false) {
+            el.reminderStatus.textContent =
+              'Aktiviert, aber der Server war nicht erreichbar. Uhrzeit später erneut speichern.';
+            showToast('Server nicht erreichbar');
+            return;
+          }
+          el.reminderStatus.textContent = reminderActiveText();
           showToast('Erinnerung aktiviert');
         });
       }).catch(function () {
@@ -1378,15 +1537,59 @@
     }
 
     function disableReminder() {
+      const id = state.settings.subscriberId;
       return navigator.serviceWorker.ready
         .then(function (reg) { return reg.pushManager.getSubscription(); })
         .then(function (sub) { return sub ? sub.unsubscribe() : true; })
         .then(function () {
+          if (WORKER_URL && id) return workerPost('/unsubscribe', { id: id }).catch(function () {});
+        })
+        .then(function () {
           paintToggle(false);
-          el.reminderSetup.classList.add('hidden');
-          el.reminderStatus.textContent = 'Aus. Tippen für eine tägliche Erinnerung an deine offenen To-dos.';
+          el.reminderTest.classList.add('hidden');
+          el.reminderStatus.textContent = 'Aus. Antippen für eine tägliche Erinnerung an deine offenen To-dos.';
           showToast('Erinnerung ausgeschaltet');
         });
+    }
+
+    function sendTest() {
+      if (!WORKER_URL) { showToast('Worker-URL fehlt – siehe worker/README.md'); return; }
+      const id = state.settings.subscriberId;
+      if (!id) { showToast('Erst die Erinnerung aktivieren'); return; }
+      showToast('Test wird gesendet …');
+      workerPost('/test', { id: id }).then(function (result) {
+        if (result.ok) {
+          showToast('Test gesendet – gleich müsste die Meldung kommen');
+        } else if (result.status === 404 || result.status === 410) {
+          showToast('Abo abgelaufen – bitte aus- und wieder einschalten');
+          paintReminder();
+        } else {
+          showToast('Test fehlgeschlagen (' + result.status + ')');
+        }
+      }).catch(function () {
+        showToast('Server nicht erreichbar');
+      });
+    }
+
+    function onTimeChange() {
+      const parts = String(el.notifyTime.value || '').split(':');
+      const h = Number(parts[0]);
+      const m = Number(parts[1]);
+      if (!Number.isInteger(h) || !Number.isInteger(m)) return;
+      state.settings.notifyHour = h;
+      state.settings.notifyMinute = m;
+      save();
+      const subscribed = el.reminderToggle.getAttribute('aria-checked') === 'true';
+      if (!subscribed) { showToast('Uhrzeit gespeichert'); return; }
+      el.reminderStatus.textContent = reminderActiveText();
+      if (!WORKER_URL) { showToast('Uhrzeit gespeichert (Worker-URL fehlt)'); return; }
+      pushSettingsToWorker().then(function (result) {
+        showToast(result && result.ok === false
+          ? 'Zeit lokal gespeichert – Server nicht erreichbar'
+          : 'Uhrzeit gespeichert');
+      }).catch(function () {
+        showToast('Zeit lokal gespeichert – Server nicht erreichbar');
+      });
     }
 
     el.reminderToggle.addEventListener('click', function () {
@@ -1397,20 +1600,36 @@
       Promise.resolve(action).catch(function () {}).then(function () { reminderBusy = false; });
     });
 
-    el.reminderCopy.addEventListener('click', function () {
-      const text = el.reminderCode.value;
-      const fallback = function () {
-        el.reminderCode.select();
-        try { document.execCommand('copy'); } catch (e) {}
-        showToast('Code markiert – jetzt kopieren');
-      };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(function () {
-          showToast('Code kopiert');
-        }).catch(fallback);
-      } else {
-        fallback();
-      }
+    el.reminderTest.addEventListener('click', sendTest);
+    el.notifyTime.addEventListener('change', onTimeChange);
+
+    /* ---- Einstellungen-Menü (Zahnrad) öffnen / schließen ---- */
+    let settingsOpen = false;
+    function openSettings() {
+      el.settingsModal.classList.remove('hidden');
+      paintReminder();
+      requestAnimationFrame(function () {
+        el.settingsBackdrop.classList.remove('opacity-0');
+        el.settingsPanel.classList.remove('opacity-0', 'translate-y-6');
+      });
+      settingsOpen = true;
+    }
+    function closeSettings() {
+      settingsOpen = false;
+      el.settingsBackdrop.classList.add('opacity-0');
+      el.settingsPanel.classList.add('opacity-0', 'translate-y-6');
+      setTimeout(function () { if (!settingsOpen) el.settingsModal.classList.add('hidden'); }, 300);
+    }
+    el.settingsBtn.addEventListener('click', openSettings);
+    el.settingsClose.addEventListener('click', closeSettings);
+    // Tippen ausserhalb des Panels schliesst. Auf dem ganzen Overlay lauschen
+    // statt nur auf dem Backdrop – der zentrierende Wrapper liegt darüber und
+    // würde die Klicks sonst abfangen.
+    el.settingsModal.addEventListener('click', function (e) {
+      if (!el.settingsPanel.contains(e.target)) closeSettings();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && settingsOpen) closeSettings();
     });
 
     /* ============================================================

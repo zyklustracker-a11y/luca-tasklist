@@ -15,12 +15,13 @@ icon-512-maskable.png     Android (randloses Symbol)
 README.md                 Diese Datei
 ```
 
-Dazu kommen zwei Dateien, die **nicht** zur Website gehören und von GitHub
-Pages ignoriert werden – sie steuern nur die tägliche Erinnerung:
+Dazu kommt ein Ordner, der **nicht** zur Website gehört – er enthält den
+Cloudflare Worker, der morgens den Push anstösst:
 
 ```
-.github/workflows/daily-reminder.yml   Zeitplan, der morgens anstösst
-scripts/send-reminder.mjs              Absender, ohne Fremdbibliotheken
+worker/worker.js       Cloudflare Worker: Endpunkte + Cron-Versand
+worker/wrangler.toml    Konfiguration
+worker/README.md        Schritt-für-Schritt-Anleitung zum Deployen
 ```
 
 ## Auf GitHub veröffentlichen
@@ -55,65 +56,54 @@ Die App schickt morgens eine Benachrichtigung mit der Zahl der offenen
 To-dos – auch wenn sie geschlossen ist.
 
 **Wie es zusammenhängt.** GitHub Pages liefert nur Dateien aus und kann
-nichts zu einer Uhrzeit auslösen. Den Anstoss gibt deshalb ein Zeitplan
-unter GitHub Actions (`.github/workflows/daily-reminder.yml`), der
-`scripts/send-reminder.mjs` startet. Das Skript schickt einen **leeren**
-Push – ganz ohne Inhalt. Den Text baut der Service Worker auf dem iPhone
-selbst, denn nur er kommt an die IndexedDB und weiss, wie viele Tasks offen
-sind. Der Absender erfährt nichts über deine Daten.
+nichts zu einer Uhrzeit auslösen. Den Anstoss gibt deshalb ein **Cloudflare
+Worker** (Ordner `worker/`) mit einem Cron-Trigger im kostenlosen Tarif. Der
+Worker schickt einen **leeren** Push – ganz ohne Inhalt. Den Text baut der
+Service Worker auf dem iPhone selbst, denn nur er kommt an die IndexedDB und
+weiss, wie viele Tasks offen sind. Der Server erfährt nichts über deine Daten.
 
-### Ein- und Ausschalten
+Die App meldet ihr Push-Abo samt gewünschter **Uhrzeit und Zeitzone**
+automatisch beim Worker an; der speichert beides in Cloudflare Workers KV. Der
+Cron-Lauf rechnet die Uhrzeit gegen deine Zeitzone und sendet, wenn es so weit
+ist – Zeitumstellung inklusive.
 
-In der App ganz unten bei **Morgens erinnern** steht ein Schalter. Er meldet
-dieses Gerät beim Push-Dienst an (ein) oder wieder ab (aus) – das passiert
-sofort und komplett auf dem Gerät.
+### Server einrichten (einmalig)
 
-### Einrichtung, einmalig
+Die vollständige Schritt-für-Schritt-Anleitung mit allen Befehlen steht in
+**[`worker/README.md`](worker/README.md)**: Cloudflare-Konto anlegen, `wrangler`
+installieren, KV-Namespace erstellen, privaten VAPID-Schlüssel als Secret
+setzen, deployen und zum Schluss die Worker-Adresse als `WORKER_URL` in
+`index.html` eintragen.
 
-Damit der Anstoss auch ankommt, wenn die App geschlossen ist, muss das Abo
-einmal bei GitHub hinterlegt werden:
+### Bedienung in der App (Zahnrad ⚙️ oben rechts)
 
-1. **App vom Home-Bildschirm öffnen.** iOS erlaubt Web-Benachrichtigungen
-   ausschliesslich installierten Web-Apps, nicht im Safari-Tab.
-2. Bei **Morgens erinnern** den Schalter einschalten und die Rückfrage von
-   iOS erlauben. Danach klappt darunter ein Einrichtungs-Code auf.
-3. Auf **Code kopieren** tippen.
-4. Im Repository unter *Settings → Secrets and variables → Actions* anlegen:
-   - Reiter **Secrets**: `PUSH_SUBSCRIPTION` – der eben kopierte Code
-   - Reiter **Secrets**: `VAPID_PRIVATE_KEY` – der private Schlüssel zum
-     öffentlichen, der in `index.html` und `scripts/send-reminder.mjs` steht
-5. Zum Testen unter *Actions → Tägliche Erinnerung → Run workflow* sofort
-   auslösen, statt bis morgen früh zu warten.
+- **Morgens erinnern:** Schalter ein/aus. Beim Einschalten fragt iOS nach der
+  Erlaubnis (nur nach echtem Tippen), danach meldet sich das Gerät automatisch
+  beim Worker an. Aus = kein täglicher Push.
+- **Uhrzeit:** frei wählbar. Änderungen werden sofort gespeichert und an den
+  Worker geschickt.
+- **Test-Benachrichtigung senden:** löst sofort einen Push aus, um die ganze
+  Kette zu prüfen.
+- **Google-Konto:** nur ein Platzhalter („kommt bald"), Funktion folgt später
+  mit Firebase.
 
-### Uhrzeit ändern
+Alle Einstellungen bleiben auch nach dem Neuladen erhalten.
 
-Die Uhrzeit steht in der Repository-**Variable** `REMINDER_HOUR` (nicht
-Secret), einzutragen unter *Settings → Secrets and variables → Actions →
-Variables*: eine Zahl von 0 bis 23, in Ortszeit `Europe/Zurich`. Ohne
-Eintrag bleibt es bei **9 Uhr**. Die Zeitumstellung wird automatisch
-berücksichtigt.
-
-> Warum nicht direkt in der App? Die App kann dem GitHub-Zeitplan nicht
-> sagen, wann er laufen soll, und iOS lässt keine unsichtbaren Pushes zu
-> (jeder Push muss eine Meldung zeigen). Die Uhrzeit muss deshalb dort
-> stehen, wo gesendet wird – bei GitHub.
+> **Wichtig:** iOS erlaubt Web-Benachrichtigungen nur, wenn die App über
+> *Teilen → Zum Home-Bildschirm* installiert und von dort geöffnet wurde –
+> nicht im normalen Safari-Tab.
 
 ### Betrieb
 
-Der Zeitplan läuft stündlich (in UTC). Das Skript sendet nur bei dem Lauf,
-bei dem es in `Europe/Zurich` gerade `REMINDER_HOUR` ist.
+Der Cron-Trigger läuft alle 15 Minuten (in UTC) und prüft für jedes Gerät, ob
+in dessen Zeitzone gerade die Wunschzeit erreicht ist. Ein „heute schon
+gesendet"-Merker sorgt dafür, dass es pro Tag genau eine Meldung gibt, auch
+wenn ein Lauf mal verspätet kommt.
 
-Zwei Dinge können den Betrieb stoppen:
-
-- **Das Abo läuft ab.** Wird die App monatelang nicht geöffnet oder neu
-  installiert, verwirft Apple das Abo. Der Lauf schlägt dann mit HTTP 410
-  fehl. Abhilfe: App öffnen, Erinnerung erneut aktivieren, das Secret
-  `PUSH_SUBSCRIPTION` durch den neuen Code ersetzen.
-- **GitHub schaltet den Zeitplan ab**, wenn 60 Tage lang niemand etwas ins
-  Repository schiebt. Ein beliebiger Commit reicht, um ihn zu reaktivieren.
-
-Ausserdem feuert der Zeitplan bei GitHub oft 5 bis 30 Minuten später als
-eingetragen. Die Meldung kommt also nicht auf die Minute genau.
+**Wenn das Abo abläuft** (App monatelang nicht geöffnet oder neu installiert),
+antwortet der Push-Dienst mit HTTP 404/410. Der Worker löscht das tote Abo
+dann selbst aus KV. Abhilfe auf dem iPhone: im Zahnrad-Menü die Erinnerung
+aus- und wieder einschalten – das legt ein frisches Abo an.
 
 ## Wie die Tage funktionieren
 

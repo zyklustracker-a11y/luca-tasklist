@@ -1,0 +1,27 @@
+# Cloudflare-Worker für den täglichen Morgen-Push.
+# Deploy-Anleitung Schritt für Schritt: siehe worker/README.md
+
+name = "luca-tasklist-push"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Öffentlicher VAPID-Schlüssel – identisch zu VAPID_PUBLIC_KEY in index.html.
+# Nicht geheim, darf im Repository stehen. Der PRIVATE Schlüssel wird NICHT
+# hier eingetragen, sondern als Secret gesetzt:
+#   wrangler secret put VAPID_PRIVATE_KEY
+[vars]
+VAPID_PUBLIC_KEY = "BE9fLq3HvD6izUe-EjJBPnLK2AGoKN41v16z_5bRfeqjP1bj5rDpG6vLSl9ZT2D1Yt-a32Eg9WNg02lt63Y1v40"
+# Optional strenger: nur Anfragen von deiner GitHub-Pages-Adresse zulassen.
+# Ohne diese Zeile sind Anfragen von überall erlaubt (für eine private App ok).
+# ALLOWED_ORIGIN = "https://DEINNAME.github.io"
+
+# Speicher für Abos + Einstellungen. Die id trägt "wrangler kv namespace create"
+# aus; siehe README.
+[[kv_namespaces]]
+binding = "SUBS"
+id = "HIER_KV_NAMESPACE_ID_EINTRAGEN"
+
+# Cron: alle 15 Minuten prüfen, für wen es Zeit ist. Die eigentliche Uhrzeit
+# steuerst du in der App; der Worker gleicht sie gegen deine Zeitzone ab.
+[triggers]
+crons = ["*/15 * * * *"]
