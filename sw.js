@@ -1,12 +1,12 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v11';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [
   './',
   './index.html',
-  './tailwind.css',
+  './tailwind.css?v=11',
   './manifest.webmanifest',
   './favicon-32.png',
   './apple-touch-icon.png',
@@ -130,6 +130,25 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
         .catch(() => caches.match('./index.html').then((r) => r || caches.match('./')))
+    );
+    return;
+  }
+
+  // Eigene CSS/JS immer zuerst aus dem Netz, damit Style- und Logik-Updates
+  // sofort greifen (sonst hält der Cache z. B. eine alte tailwind.css fest).
+  // Offline fällt es auf den Cache zurück.
+  const url = new URL(req.url);
+  if (url.origin === self.location.origin && /\.(css|js)$/.test(url.pathname)) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req))
     );
     return;
   }
