@@ -1,6 +1,6 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v12';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [
@@ -119,6 +119,19 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+
+  // Firebase-Auth und Firestore niemals über den Cache leiten – der Login und
+  // die Live-Synchronisation müssen immer direkt ins Netz. (Das Firebase-SDK
+  // von www.gstatic.com ist bewusst NICHT ausgenommen, damit es offline aus dem
+  // Cache kommt.)
+  const apiUrl = new URL(req.url);
+  if (/(^|\.)googleapis\.com$/.test(apiUrl.hostname) ||
+      apiUrl.hostname === 'apis.google.com' ||
+      apiUrl.hostname === 'accounts.google.com' ||
+      apiUrl.hostname.endsWith('.firebaseapp.com') ||
+      apiUrl.hostname.endsWith('.firebaseio.com')) {
+    return; // der Browser holt es selbst
+  }
 
   // HTML immer zuerst aus dem Netz holen, damit Updates sofort ankommen
   if (req.mode === 'navigate') {

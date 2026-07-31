@@ -431,18 +431,28 @@
             </button>
           </section>
 
-          <!-- Google-Konto (Platzhalter, kommt später mit Firebase) -->
+          <!-- Google-Konto: Anmelden & geräteübergreifend synchronisieren -->
           <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
-                <p class="text-sm font-semibold text-slate-300">Google-Konto</p>
-                <p class="mt-1 text-xs leading-relaxed text-slate-500">Anmelden und zwischen Geräten synchronisieren.</p>
+                <p class="text-sm font-semibold text-slate-200">Google-Konto</p>
+                <p id="account-status" class="mt-1 text-xs leading-relaxed text-slate-400">Wird geladen …</p>
               </div>
-              <span class="shrink-0 rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-slate-500">Kommt bald</span>
+              <span id="account-badge" class="hidden shrink-0 rounded-full border border-accent/30 bg-accent-muted/30 px-3 py-1 text-xs font-medium text-accent-glow">Synchronisiert</span>
             </div>
-            <button type="button" disabled aria-disabled="true"
-              class="mt-3 w-full cursor-not-allowed rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-500 opacity-60">
-              Mit Google anmelden
+            <button id="account-signin" type="button"
+              class="mt-3 hidden w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100 active:scale-[0.99] disabled:opacity-60">
+              <svg class="h-4 w-4 shrink-0" viewBox="0 0 18 18" aria-hidden="true">
+                <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+                <path fill="#FBBC05" d="M3.97 10.72a5.41 5.41 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
+                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.47.89 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+              </svg>
+              <span>Mit Google anmelden</span>
+            </button>
+            <button id="account-signout" type="button"
+              class="mt-3 hidden w-full rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/20 hover:text-slate-200 active:scale-[0.99]">
+              Abmelden
             </button>
           </section>
 
@@ -545,6 +555,8 @@
       saveTimer = setTimeout(function () {
         idbSet(STATE_KEY, state).catch(function () {/* localStorage reicht als Fallback */});
       }, 120);
+      // Bei angemeldetem Konto den neuen Stand (entprellt) in die Cloud melden.
+      if (window.__taskSync && window.__taskSync.notifyChange) window.__taskSync.notifyChange();
     }
 
     function flushSave() {
@@ -738,6 +750,10 @@
       importBtn: document.getElementById('import-btn'),
       importFile: document.getElementById('import-file'),
       storageNote: document.getElementById('storage-note'),
+      accountStatus: document.getElementById('account-status'),
+      accountBadge: document.getElementById('account-badge'),
+      accountSignin: document.getElementById('account-signin'),
+      accountSignout: document.getElementById('account-signout'),
       reminderStatus: document.getElementById('reminder-status'),
       reminderToggle: document.getElementById('reminder-toggle'),
       reminderKnob: document.getElementById('reminder-knob'),
@@ -1633,6 +1649,116 @@
     });
 
     /* ============================================================
+       13b. Google-Konto & Cloud-Sync (Firebase)
+
+       Die eigentliche Firebase-Logik steckt im <script type="module"> ganz
+       unten. Hier liegt nur die Brücke: die App reicht ihren Stand nach oben
+       (getSyncPayload), übernimmt Änderungen aus der Cloud (applySyncPayload –
+       schreibt AUCH lokal, damit die Benachrichtigungen weiter stimmen) und
+       aktualisiert die Anzeige im Zahnrad-Menü (setAuthUi).
+       ============================================================ */
+
+    // Wird aufgelöst, sobald der erste lokale Ladevorgang durch ist. Der
+    // Sync-Teil wartet darauf, bevor er zusammenführt – sonst würde er mit
+    // einem noch leeren Stand arbeiten und die lokalen Tasks überschreiben.
+    let resolveAppReady;
+    window.__taskAppReady = new Promise(function (r) { resolveAppReady = r; });
+    window.__markAppReady = function () { if (resolveAppReady) { resolveAppReady(); resolveAppReady = null; } };
+
+    // Nur die geräteübergreifenden Daten wandern in die Cloud. Bewusst NICHT
+    // dabei: settings (enthält die geräteeigene subscriberId für die Push-
+    // Benachrichtigungen) sowie day/celebrationsToday (reiner Tageszustand).
+    function getSyncPayload() {
+      return JSON.parse(JSON.stringify({
+        tasks: state.tasks || [],
+        journal: state.journal || [],
+        history: state.history || {},
+        bestStreak: state.bestStreak || 0,
+      }));
+    }
+
+    // Übernimmt einen aus der Cloud kommenden (bereits zusammengeführten) Stand.
+    // flushSave() schreibt sofort IndexedDB + localStorage – damit der Service
+    // Worker die richtige Zahl offener To-dos für die Benachrichtigung sieht.
+    // Bewusst flushSave() statt save(): das meldet NICHT wieder an die Cloud
+    // zurück und verhindert so eine Endlosschleife.
+    function applySyncPayload(payload) {
+      if (!payload || typeof payload !== 'object') return;
+      if (Array.isArray(payload.tasks)) state.tasks = payload.tasks;
+      if (Array.isArray(payload.journal)) state.journal = payload.journal;
+      if (payload.history && typeof payload.history === 'object') state.history = payload.history;
+      state.bestStreak = Math.max(state.bestStreak || 0, Number(payload.bestStreak) || 0);
+      rollOverIfNeeded();
+      state.bestStreak = Math.max(state.bestStreak, computeBestStreak());
+      firstRender = true;
+      flushSave();
+      render();
+    }
+
+    function accountName(user) {
+      if (!user) return 'angemeldet';
+      return user.name || user.email || 'angemeldet';
+    }
+
+    // Zustände: loading | signedout | signing | signedin | error | unavailable
+    function setAuthUi(info) {
+      const status = info && info.status;
+      el.accountBadge.classList.add('hidden');
+      el.accountSignin.classList.add('hidden');
+      el.accountSignout.classList.add('hidden');
+      el.accountSignin.disabled = false;
+
+      if (status === 'signedin') {
+        el.accountBadge.classList.remove('hidden');
+        el.accountSignout.classList.remove('hidden');
+        el.accountStatus.textContent =
+          'Angemeldet als ' + accountName(info.user) + '. Deine Aufgaben werden geräteübergreifend synchronisiert.';
+      } else if (status === 'signing') {
+        el.accountSignin.classList.remove('hidden');
+        el.accountSignin.disabled = true;
+        el.accountStatus.textContent = 'Anmeldung läuft – du wirst zu Google weitergeleitet …';
+      } else if (status === 'error') {
+        el.accountSignin.classList.remove('hidden');
+        el.accountStatus.textContent = (info && info.message) || 'Anmeldung fehlgeschlagen. Bitte erneut versuchen.';
+      } else if (status === 'unavailable') {
+        el.accountStatus.textContent = 'Synchronisierung gerade nicht verfügbar (offline?). Die App funktioniert lokal normal weiter.';
+      } else if (status === 'signedout') {
+        el.accountSignin.classList.remove('hidden');
+        el.accountStatus.textContent = 'Nicht angemeldet. Melde dich an, um deine Aufgaben zwischen mehreren Geräten zu synchronisieren.';
+      } else {
+        el.accountStatus.textContent = 'Wird geladen …';
+      }
+    }
+
+    // Brücke, die der Firebase-Teil unten benutzt.
+    window.__taskApp = {
+      getSyncPayload: getSyncPayload,
+      applySyncPayload: applySyncPayload,
+      setAuthUi: setAuthUi,
+    };
+
+    el.accountSignin.addEventListener('click', function () {
+      if (window.__taskSync && window.__taskSync.signIn) {
+        window.__taskSync.signIn();
+      } else {
+        showToast('Anmeldung lädt noch – kurz warten und erneut tippen.');
+      }
+    });
+    el.accountSignout.addEventListener('click', function () {
+      if (window.__taskSync && window.__taskSync.signOut) {
+        window.__taskSync.signOut();
+        showToast('Abgemeldet – deine Aufgaben bleiben lokal erhalten.');
+      }
+    });
+
+    setAuthUi({ status: 'loading' });
+    // Falls Firebase nicht lädt (z. B. offline beim allerersten Start), nach
+    // kurzer Zeit ehrlich sagen, dass Sync gerade nicht geht.
+    setTimeout(function () {
+      if (!window.__taskSync) setAuthUi({ status: 'unavailable' });
+    }, 6000);
+
+    /* ============================================================
        14. Tageswechsel im Hintergrund + Start
        ============================================================ */
     function checkDayChange() {
@@ -1697,6 +1823,8 @@
       if (window.__splashBump) window.__splashBump(85);
       splashAppReady = true;
       releaseSplash();
+      // Dem Sync-Teil signalisieren, dass der lokale Stand jetzt geladen ist.
+      if (window.__markAppReady) window.__markAppReady();
     });
 
     /* Service Worker – macht die App offline nutzbar */
@@ -1706,6 +1834,190 @@
       });
     }
   })();
+  </script>
+
+  <!-- Firebase: Google-Login (Redirect-Flow) + Firestore-Sync. Läuft als
+       eigenes Modul, getrennt vom Haupt-Skript oben. Fällt dieser Teil aus
+       (z. B. offline), funktioniert die App unverändert lokal weiter. -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import {
+      getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult,
+      onAuthStateChanged, signOut
+    } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+    import {
+      initializeFirestore, persistentLocalCache, persistentSingleTabManager,
+      doc, getDoc, setDoc, onSnapshot
+    } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+
+    // Öffentliche Web-Konfiguration (der apiKey ist bewusst kein Geheimnis –
+    // der Schutz kommt über die Firestore-Sicherheitsregeln).
+    const firebaseConfig = {
+      apiKey: 'AIzaSyAhNMjPix2H9cLJ904Qu8yzBtywO7_pLfQ',
+      authDomain: 'luca-tasklist.firebaseapp.com',
+      projectId: 'luca-tasklist',
+      storageBucket: 'luca-tasklist.firebasestorage.app',
+      messagingSenderId: '170557423011',
+      appId: '1:170557423011:web:cd347184fa77b94351ae16',
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    let db;
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
+      });
+    } catch (e) {
+      db = initializeFirestore(app, {}); // Fallback ohne dauerhaften Cache
+    }
+
+    function bridge() { return window.__taskApp || null; }
+    function setUi(info) { const b = bridge(); if (b && b.setAuthUi) b.setAuthUi(info); }
+    function localPayload() {
+      const b = bridge();
+      return (b && b.getSyncPayload) ? b.getSyncPayload()
+        : { tasks: [], journal: [], history: {}, bestStreak: 0 };
+    }
+    function applyPayload(p) { const b = bridge(); if (b && b.applySyncPayload) b.applySyncPayload(p); }
+
+    function friendly(err) {
+      const code = (err && err.code) ? String(err.code) : '';
+      if (code.indexOf('network') !== -1) return 'Keine Verbindung – prüf dein Internet und versuch es erneut.';
+      if (code === 'auth/unauthorized-domain') return 'Diese Adresse ist in Firebase noch nicht als „Authorized domain“ freigegeben.';
+      if (code === 'auth/operation-not-supported-in-this-environment' ||
+          code === 'auth/popup-blocked') return 'Hier nicht möglich – bitte die Seite in Safari öffnen und dort anmelden.';
+      return 'Anmeldung fehlgeschlagen. Bitte erneut versuchen.';
+    }
+
+    /* ---- Zusammenführen (rein rechnerisch, ohne Anzeige) ---- */
+    function unionJournal(a, b) {
+      const m = new Map();
+      (Array.isArray(a) ? a : []).forEach(function (e) { if (e && e.id) m.set(e.id, e); });
+      (Array.isArray(b) ? b : []).forEach(function (e) { if (e && e.id) m.set(e.id, e); });
+      return Array.from(m.values());
+    }
+    // Erstanmeldung: beide Seiten vereinen, damit nichts verlorengeht.
+    function loginMerge(local, remote) {
+      local = local || {}; remote = remote || {};
+      const journal = unionJournal(remote.journal, local.journal);
+      const done = new Set(journal.map(function (e) { return e.id; }));
+      const tm = new Map();
+      (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      const tasks = Array.from(tm.values()).filter(function (t) { return !done.has(t.id); });
+      return {
+        tasks: tasks,
+        journal: journal,
+        history: Object.assign({}, remote.history || {}, local.history || {}),
+        bestStreak: Math.max(Number(local.bestStreak) || 0, Number(remote.bestStreak) || 0),
+      };
+    }
+    // Laufender Betrieb: bei den OFFENEN Tasks gewinnt die Cloud (so wirken
+    // Löschen/Abhaken auf allen Geräten); das Journal wird immer VEREINT, damit
+    // erledigte Aufgaben nie verlorengehen.
+    function reconcileRemote(local, remote) {
+      local = local || {}; remote = remote || {};
+      const journal = unionJournal(remote.journal, local.journal);
+      const done = new Set(journal.map(function (e) { return e.id; }));
+      const tasks = (Array.isArray(remote.tasks) ? remote.tasks : [])
+        .filter(function (t) { return t && t.id && !done.has(t.id); });
+      return {
+        tasks: tasks,
+        journal: journal,
+        history: Object.assign({}, local.history || {}, remote.history || {}),
+        bestStreak: Math.max(Number(local.bestStreak) || 0, Number(remote.bestStreak) || 0),
+      };
+    }
+
+    let userRef = null;
+    let unsub = null;
+    let lastSyncedJson = null;  // verhindert Echo-Schleifen (schon Bekanntes nicht erneut schreiben/anwenden)
+    let pushTimer = null;
+
+    function doPush() {
+      if (!userRef) return;
+      const payload = localPayload();
+      const json = JSON.stringify(payload);
+      if (json === lastSyncedJson) return;
+      lastSyncedJson = json;
+      setDoc(userRef, payload).catch(function () {/* wird beim nächsten Mal erneut versucht */});
+    }
+
+    window.__taskSync = {
+      signIn: function () {
+        setUi({ status: 'signing' });
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        // Redirect statt Popup: das ist im installierten iOS-Modus zuverlässig.
+        return signInWithRedirect(auth, provider).catch(function (err) {
+          setUi({ status: 'error', message: friendly(err) });
+        });
+      },
+      signOut: function () {
+        return signOut(auth).catch(function () {});
+      },
+      notifyChange: function () {
+        clearTimeout(pushTimer);
+        pushTimer = setTimeout(doPush, 500);
+      },
+    };
+
+    // Rückkehr vom Google-Redirect abfangen (Fehler sichtbar machen; der Nutzer
+    // selbst kommt über onAuthStateChanged an).
+    getRedirectResult(auth).catch(function (err) {
+      setUi({ status: 'error', message: friendly(err) });
+    });
+
+    onAuthStateChanged(auth, async function (user) {
+      if (unsub) { unsub(); unsub = null; }
+      lastSyncedJson = null;
+
+      if (!user) {
+        userRef = null;
+        setUi({ status: 'signedout' });
+        return;
+      }
+
+      setUi({ status: 'signedin', user: { name: user.displayName, email: user.email } });
+
+      // Warten, bis der lokale Stand geladen ist – sonst würden wir mit leerem
+      // Stand zusammenführen und die lokalen Tasks verlieren.
+      try { await window.__taskAppReady; } catch (e) {}
+
+      userRef = doc(db, 'users', user.uid);
+
+      // Erstabgleich: lokalen und Cloud-Stand vereinen, hochschreiben, anwenden.
+      try {
+        const snap = await getDoc(userRef);
+        const remote = snap.exists() ? snap.data() : { tasks: [], journal: [], history: {}, bestStreak: 0 };
+        const merged = loginMerge(localPayload(), remote);
+        lastSyncedJson = JSON.stringify(merged);
+        await setDoc(userRef, merged);
+        applyPayload(merged);
+      } catch (e) {
+        // Offline o. Ä.: trotzdem den Live-Listener aufsetzen; er greift, sobald
+        // wieder Verbindung besteht.
+      }
+
+      // Live-Verbindung: Änderungen von anderen Geräten sofort übernehmen.
+      unsub = onSnapshot(userRef, function (snap) {
+        if (!snap.exists()) return;
+        if (snap.metadata.hasPendingWrites) return; // eigene, noch unbestätigte Schreibvorgänge überspringen
+        const remote = snap.data();
+        const merged = reconcileRemote(localPayload(), remote);
+        const json = JSON.stringify(merged);
+        if (json === lastSyncedJson) return;
+        lastSyncedJson = json;
+        applyPayload(merged);
+        // Hatten wir lokal erledigte Aufgaben, die der Cloud noch fehlten, diese
+        // einmalig nachreichen.
+        if (json !== JSON.stringify(remote)) {
+          setDoc(userRef, merged).catch(function () {});
+        }
+      }, function () {/* Listen-Fehler ignorieren; onAuthStateChanged/Retry greift */});
+    });
   </script>
 </body>
 </html>

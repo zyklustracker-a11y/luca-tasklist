@@ -84,8 +84,9 @@ setzen, deployen und zum Schluss die Worker-Adresse als `WORKER_URL` in
   Worker geschickt.
 - **Test-Benachrichtigung senden:** löst sofort einen Push aus, um die ganze
   Kette zu prüfen.
-- **Google-Konto:** nur ein Platzhalter („kommt bald"), Funktion folgt später
-  mit Firebase.
+- **Google-Konto:** mit Google anmelden, um die Aufgaben geräteübergreifend zu
+  synchronisieren (siehe Abschnitt „Synchronisation zwischen Geräten"). Ohne
+  Anmeldung läuft alles wie gehabt nur lokal.
 
 Alle Einstellungen bleiben auch nach dem Neuladen erhalten.
 
@@ -138,10 +139,44 @@ Primär in **IndexedDB**, zusätzlich gespiegelt in `localStorage`. Fällt eines
 aus, übernimmt das andere. Über *Backup speichern* bekommst du eine JSON-Datei,
 *Backup laden* spielt sie zurück.
 
-Die Daten liegen auf dem jeweiligen Gerät. Für echte Synchronisation zwischen
-iPhone und Laptop bräuchte es einen Server (z. B. Supabase); die Speicherschicht
-in `index.html` (Abschnitt 1) ist so gebaut, dass dafür nur `save()` und
-`loadState()` ausgetauscht werden müssten.
+Die Daten liegen auf dem jeweiligen Gerät. Für die Synchronisation zwischen
+iPhone und Laptop meldet man sich mit Google an (siehe unten) – dann spiegelt
+die App den Stand zusätzlich in Cloud Firestore. Lokal-zuerst bleibt bestehen:
+IndexedDB/localStorage werden weiter gepflegt, damit die Benachrichtigungen die
+richtige Zahl offener To-dos anzeigen.
+
+## Synchronisation zwischen Geräten (Google-Login + Firebase)
+
+Optional. Ohne Anmeldung funktioniert die App unverändert nur lokal und offline.
+
+**Wie es funktioniert.** Im Zahnrad-Menü meldet man sich mit Google an
+(Firebase Authentication). Danach spiegelt die App die Aufgaben in ein privates
+Dokument in **Cloud Firestore** (`users/<deine-uid>`). Änderungen auf einem
+Gerät erscheinen dank Live-Verbindung schnell auf dem anderen. Kommt eine
+Änderung aus der Cloud, wird sie auch wieder lokal gespeichert – so bleiben die
+Benachrichtigungen korrekt. Beim ersten Anmelden werden vorhandene lokale
+Aufgaben mit der Cloud **zusammengeführt** (nichts wird gelöscht).
+
+Genutzt wird ausschließlich der kostenlose **Spark-Tarif** (Auth + Firestore),
+keine Cloud Functions, kein Cloud Storage.
+
+**Login im installierten iOS-Modus.** Verwendet wird der **Redirect-Flow**
+(nicht Popup), weil Popups in der Home-Bildschirm-App von iOS meist blockiert
+sind. Am zuverlässigsten testet man zuerst im normalen Safari. Falls die
+Anmeldung in der installierten PWA im Einzelfall hakt (WebKit trennt
+Cookies/Speicher strenger), hilft es, sich einmal im normalen Safari mit
+derselben Adresse anzumelden.
+
+**Sicherheit.** Firestore-Regeln erlauben jedem Nutzer nur Zugriff auf sein
+eigenes Dokument (`request.auth.uid == userId`). Der öffentliche `apiKey` in der
+Web-Config ist kein Geheimnis; der Schutz kommt über diese Regeln.
+
+**Einrichtung in der Firebase-Konsole (einmalig):** Projekt anlegen → Web-App
+hinzufügen und `firebaseConfig` in den `<script type="module">`-Block unten in
+`index.html` eintragen → Authentication mit Google-Anbieter aktivieren →
+Firestore-Datenbank in einer EU-Region anlegen → unter Authentication →
+Settings → Authorized domains die GitHub-Pages-Adresse
+(`zyklustracker-a11y.github.io`) hinzufügen.
 
 Ältere Stände werden beim Laden automatisch migriert: Aus dem früheren Typ
 „jeden Tag" werden normale Tasks, und was zu dem Zeitpunkt abgehakt war,
