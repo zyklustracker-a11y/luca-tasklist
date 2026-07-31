@@ -4,6 +4,7 @@
 name = "luca-tasklist-push"
 main = "worker.js"
 compatibility_date = "2024-11-01"
+account_id = "b0af5adf3e408abb8566f16eb1451f2f"
 
 # Öffentlicher VAPID-Schlüssel – identisch zu VAPID_PUBLIC_KEY in index.html.
 # Nicht geheim, darf im Repository stehen. Der PRIVATE Schlüssel wird NICHT
@@ -15,11 +16,11 @@ VAPID_PUBLIC_KEY = "BE9fLq3HvD6izUe-EjJBPnLK2AGoKN41v16z_5bRfeqjP1bj5rDpG6vLSl9Z
 # Ohne diese Zeile sind Anfragen von überall erlaubt (für eine private App ok).
 # ALLOWED_ORIGIN = "https://DEINNAME.github.io"
 
-# Speicher für Abos + Einstellungen. Die id trägt "wrangler kv namespace create"
-# aus; siehe README.
+# Speicher für Abos + Einstellungen. Verweist auf den bestehenden
+# KV-Namespace – kein neuer nötig.
 [[kv_namespaces]]
 binding = "SUBS"
-id = "HIER_KV_NAMESPACE_ID_EINTRAGEN"
+id = "dfbab15d410c46978b67765115a509fc"
 
 # Cron: alle 15 Minuten prüfen, für wen es Zeit ist. Die eigentliche Uhrzeit
 # steuerst du in der App; der Worker gleicht sie gegen deine Zeitzone ab.

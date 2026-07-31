@@ -52,17 +52,19 @@ Wir verwenden **denselben** Schlüssel, der schon in der App steckt.
 > (Konstante `VAPID_PUBLIC_KEY`) eintragen und in der App die Erinnerung neu
 > aktivieren. Sonst passt das alte Abo nicht mehr zum neuen Schlüssel.
 
-### 4. KV-Namespace anlegen
+### 4. KV-Namespace
 
-Hier speichert der Worker deine Abos und Einstellungen.
+Hier speichert der Worker deine Abos und Einstellungen. Dein bestehender
+Namespace ist bereits in `wrangler.toml` eingetragen
+(`id = "dfbab15d410c46978b67765115a509fc"`), ebenso deine Account-ID. **Hier
+ist also nichts zu tun.**
 
-```bash
-wrangler kv namespace create SUBS
-```
-
-Der Befehl gibt eine Zeile mit einer `id = "..."` aus. Diese ID in
-`wrangler.toml` bei `[[kv_namespaces]]` statt `HIER_KV_NAMESPACE_ID_EINTRAGEN`
-eintragen.
+> Falls du doch einen neuen anlegen willst:
+> ```bash
+> wrangler kv namespace create SUBS
+> ```
+> Die ausgegebene `id = "..."` dann in `wrangler.toml` bei `[[kv_namespaces]]`
+> eintragen.
 
 ### 5. Privaten VAPID-Schlüssel als Secret setzen
 
