@@ -1,0 +1,51 @@
+name: Worker deployen
+
+# Einmal-Deploy des Cloudflare Workers per Knopfdruck – ganz ohne Terminal.
+# Voraussetzung: zwei Repository-Secrets sind hinterlegt (Settings → Secrets
+# and variables → Actions):
+#   CLOUDFLARE_API_TOKEN  – Cloudflare-Token (Scopes: Workers Scripts Edit,
+#                           Workers KV Storage Edit)
+#   VAPID_PRIVATE_KEY     – der private VAPID-Schlüssel
+#
+# Starten: Reiter "Actions" → "Worker deployen" → "Run workflow".
+# Die Worker-Adresse steht danach oben in der Zusammenfassung des Laufs.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Worker deployen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          set -o pipefail
+          npx --yes wrangler@3 deploy | tee deploy.out
+          URL=$(grep -Eo 'https://[a-zA-Z0-9._-]+\.workers\.dev' deploy.out | head -1)
+          {
+            echo "## Worker deployt"
+            echo ""
+            echo "**Worker-URL:** $URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: VAPID-Private-Key als Secret setzen
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: printf '%s' "$VAPID_PRIVATE_KEY" | npx --yes wrangler@3 secret put VAPID_PRIVATE_KEY
