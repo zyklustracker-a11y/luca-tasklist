@@ -11,7 +11,7 @@ account_id = "b0af5adf3e408abb8566f16eb1451f2f"
 # hier eingetragen, sondern als Secret gesetzt:
 #   wrangler secret put VAPID_PRIVATE_KEY
 [vars]
-VAPID_PUBLIC_KEY = "BGrrsCvgEiu1EKn1xwhFey5878G-SjnYg2VJkWzBLaGMMhzixlRgNHv9eWP0YjKmzm0JPh3MkuBBfJuhz07O0n0"
+VAPID_PUBLIC_KEY = "BLoqjHdIwfSrLH4JxSWWjxvudOsqhGMNA8RsKFUysL6FlS3ZWjDWoSyw7hRTy1cdteL652gWuBKLqi57eyImkC8"
 # Optional strenger: nur Anfragen von deiner GitHub-Pages-Adresse zulassen.
 # Ohne diese Zeile sind Anfragen von überall erlaubt (für eine private App ok).
 # ALLOWED_ORIGIN = "https://DEINNAME.github.io"
