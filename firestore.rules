@@ -1,0 +1,50 @@
+rules_version = '2';
+
+/*
+ * Firestore-Sicherheitsregeln – das serverseitige Äquivalent zu Row Level
+ * Security. Die Prüfung läuft bei Google, NICHT im Browser: ein Client kann
+ * fremde Dokumente technisch nicht lesen oder schreiben, auch nicht mit
+ * manipuliertem Frontend oder direktem API-Aufruf.
+ *
+ * Einspielen (einmalig, und nach jeder Änderung):
+ *   Firebase-Konsole → Firestore Database → Regeln → Inhalt einfügen →
+ *   "Veröffentlichen".
+ * Oder per CLI:  firebase deploy --only firestore:rules
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Aufgaben, Verlauf und Streak eines Nutzers.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Profil: Anzeigename und Erinnerungs-Einstellungen.
+    match /profiles/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null
+                   && request.auth.uid == uid
+                   && request.resource.data.keys().hasOnly(
+                        ['displayName', 'notifyHour', 'notifyMinute', 'tz', 'updatedAt'])
+                   && (!('displayName' in request.resource.data)
+                       || (request.resource.data.displayName is string
+                           && request.resource.data.displayName.size() <= 60))
+                   && (!('notifyHour' in request.resource.data)
+                       || (request.resource.data.notifyHour is int
+                           && request.resource.data.notifyHour >= 0
+                           && request.resource.data.notifyHour <= 23))
+                   && (!('notifyMinute' in request.resource.data)
+                       || (request.resource.data.notifyMinute is int
+                           && request.resource.data.notifyMinute >= 0
+                           && request.resource.data.notifyMinute <= 59))
+                   && (!('tz' in request.resource.data)
+                       || (request.resource.data.tz is string
+                           && request.resource.data.tz.size() <= 64));
+    }
+
+    // Alles andere ist gesperrt – auch für angemeldete Nutzer.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

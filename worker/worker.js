@@ -1,5 +1,5 @@
 /*
- * Cloudflare Worker – täglicher Morgen-Push für Luca's Task Tracker.
+ * Cloudflare Worker – täglicher Morgen-Push für den Task Tracker.
  *
  * Zwei Aufgaben:
  *   1. HTTP-Endpunkte, mit denen sich die App an- und abmeldet und einen
@@ -24,8 +24,11 @@
 const WINDOW_MIN = 90;
 
 // Kontakt für den VAPID-Nachweis (RFC 8292). Push-Dienste verlangen ein
-// mailto: oder https: als Absender-Kennung.
-const VAPID_SUBJECT = 'mailto:luca.toriellolt@gmail.com';
+// mailto: oder https: als Absender-Kennung. Kommt aus der Konfiguration
+// (VAPID_SUBJECT in wrangler.toml), damit hier keine Adresse fest verdrahtet ist.
+function vapidSubject(env) {
+  return (env && env.VAPID_SUBJECT) || 'https://github.com/';
+}
 
 /* ---------- Base64url-Helfer (WebCrypto liefert/erwartet rohe Bytes) ------ */
 
@@ -70,12 +73,12 @@ async function importVapidKey(publicKeyB64, privateKeyB64) {
   );
 }
 
-async function vapidToken(audience, key) {
+async function vapidToken(audience, key, env) {
   const header = b64urlFromString(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
   const payload = b64urlFromString(JSON.stringify({
     aud: audience,
     exp: Math.floor(Date.now() / 1000) + 12 * 3600,
-    sub: VAPID_SUBJECT,
+    sub: vapidSubject(env),
   }));
   const signingInput = new TextEncoder().encode(header + '.' + payload);
   // WebCrypto liefert die ECDSA-Signatur bereits als r||s (IEEE P-1363) –
@@ -88,7 +91,7 @@ async function vapidToken(audience, key) {
 async function sendPush(subscription, env) {
   const endpoint = new URL(subscription.endpoint);
   const key = await importVapidKey(env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
-  const token = await vapidToken(endpoint.origin, key);
+  const token = await vapidToken(endpoint.origin, key, env);
   return fetch(subscription.endpoint, {
     method: 'POST',
     headers: {
@@ -231,7 +234,7 @@ export default {
       if (request.method === 'POST' && url.pathname === '/test') return handleTest(request, env, headers);
       if (request.method === 'POST' && url.pathname === '/unsubscribe') return handleUnsubscribe(request, env, headers);
       if (request.method === 'GET' && url.pathname === '/') {
-        return new Response('Luca Tasklist Push Worker läuft.', { status: 200, headers });
+        return new Response('Task Tracker Push Worker läuft.', { status: 200, headers });
       }
       return new Response('Not found', { status: 404, headers });
     } catch (err) {

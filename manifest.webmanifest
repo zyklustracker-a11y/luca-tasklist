@@ -1,5 +1,5 @@
 {
-  "name": "Luca's Task Tracker",
+  "name": "Task Tracker",
   "short_name": "Tasks",
   "description": "Tägliche Tasks abhaken, Streak halten, nichts geht verloren.",
   "start_url": "./index.html",

@@ -1,7 +1,12 @@
-# Luca's Task Tracker
+# Task Tracker
 
 Statische Web-App, installierbar als PWA. Keine Build-Tools, kein Server nötig.
-Alle Dateien liegen flach nebeneinander – **keine Unterordner anlegen.**
+Mehrbenutzerfähig: Wer sich mit seinem Google-Konto anmeldet, bekommt eine
+eigene, isolierte Liste – inklusive eigener Push-Erinnerungen. Der Titel der App
+richtet sich nach dem Namen im Profil („Leas Task Tracker").
+
+Alle Dateien der Website liegen flach nebeneinander – **keine Unterordner
+anlegen.**
 
 ```
 index.html                Die App
@@ -19,9 +24,10 @@ Dazu kommt ein Ordner, der **nicht** zur Website gehört – er enthält den
 Cloudflare Worker, der morgens den Push anstösst:
 
 ```
-worker/worker.js       Cloudflare Worker: Endpunkte + Cron-Versand
+worker/worker.js        Cloudflare Worker: Endpunkte + Cron-Versand
 worker/wrangler.toml    Konfiguration
 worker/README.md        Schritt-für-Schritt-Anleitung zum Deployen
+firestore.rules         Zugriffsregeln der Datenbank (Datenisolation)
 ```
 
 ## Auf GitHub veröffentlichen

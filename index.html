@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Luca's Task Tracker</title>
+  <!-- Der Titel wird nach dem Laden durch den persönlichen ersetzt
+       ("<Name>s Task Tracker"). Das Manifest bleibt bewusst neutral: es wird
+       beim Installieren einmal gelesen und ist danach geräteweit fest. -->
+  <title>Task Tracker</title>
   <meta name="description" content="Tägliche Tasks abhaken, Streak halten, nichts geht verloren." />
 
   <!-- PWA / Icons -->
@@ -296,8 +299,8 @@
         <span id="weekday-badge">Heute</span>
       </div>
       <h1 class="flex flex-wrap items-center justify-center gap-x-2 text-4xl font-bold tracking-tight sm:gap-x-3 sm:text-5xl">
-        <span class="bg-gradient-to-r from-white via-accent-glow to-accent bg-clip-text text-transparent drop-shadow-[0_0_24px_rgba(74,222,128,0.25)]">
-          Luca's Task Tracker
+        <span id="app-title" class="bg-gradient-to-r from-white via-accent-glow to-accent bg-clip-text text-transparent drop-shadow-[0_0_24px_rgba(74,222,128,0.25)]">
+          Task Tracker
         </span>
         <span class="leading-none" role="img" aria-label="Flamme">&#128293;</span>
       </h1>
@@ -600,7 +603,24 @@
         journal: [],   // jede erledigte Task, nach Datum – wird nie gelöscht
         history: {},   // Altbestand aus Version 3, wird nur noch angezeigt
         settings: defaultSettings(),
+        profile: defaultProfile(),
       };
+    }
+
+    // Profil des angemeldeten Kontos. Liegt zusätzlich lokal, damit der Titel
+    // schon beim ersten Bild steht und offline nicht auf "Task Tracker"
+    // zurückfällt. Führend ist immer das Dokument profiles/<uid> in Firestore.
+    function defaultProfile() {
+      return { displayName: '', uid: null };
+    }
+
+    function sanitizeProfile(raw) {
+      const p = defaultProfile();
+      if (raw && typeof raw === 'object') {
+        if (typeof raw.displayName === 'string') p.displayName = raw.displayName.trim().slice(0, 60);
+        if (typeof raw.uid === 'string' && raw.uid) p.uid = raw.uid;
+      }
+      return p;
     }
 
     // Einstellungen der Erinnerung. subscriberId identifiziert dieses Gerät
@@ -670,6 +690,7 @@
       base.history = (raw.history && typeof raw.history === 'object') ? raw.history : {};
       base.bestStreak = Number(raw.bestStreak) || 0;   // alter Rekord bleibt Untergrenze
       base.settings = sanitizeSettings(raw.settings);
+      base.profile = sanitizeProfile(raw.profile);
       return base;
     }
 
@@ -728,6 +749,7 @@
        4. DOM
        ============================================================ */
     const el = {
+      appTitle: document.getElementById('app-title'),
       weekdayBadge: document.getElementById('weekday-badge'),
       greeting: document.getElementById('greeting'),
       progressText: document.getElementById('progress-text'),
@@ -847,11 +869,47 @@
       return parseKey(key).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'long' });
     }
 
+    /* ---- Name & Titel ------------------------------------------------
+       Der Anzeigename kommt aus dem Profil des angemeldeten Kontos. Ist
+       keiner gesetzt (nicht angemeldet, Onboarding übersprungen), heisst die
+       App schlicht "Task Tracker" – nie ein leerer oder halber Titel. */
+
+    function displayName() {
+      return (state.profile && state.profile.displayName) || '';
+    }
+
+    /**
+     * Genitiv eines Namens nach deutscher Rechtschreibung: Namen, die auf
+     * s, ß, x oder z enden, bekommen nur ein Apostroph ("Lukas’"), alle
+     * anderen ein angehängtes s ohne Apostroph ("Leas").
+     * Willst du stattdessen überall die Apostroph-Form ("Lea’s"), reicht es,
+     * das else zu   name + '’s'   zu ändern.
+     */
+    function possessive(name) {
+      const clean = normalizeText(name);
+      if (!clean) return '';
+      return /[sßxzSXZ]$/.test(clean) ? clean + '’' : clean + 's';
+    }
+
+    function trackerTitle() {
+      const owner = possessive(displayName());
+      return owner ? owner + ' Task Tracker' : 'Task Tracker';
+    }
+
+    /** Schreibt den Namen überall hin, wo er auftaucht. */
+    function applyIdentity() {
+      const title = trackerTitle();
+      document.title = title;
+      if (el.appTitle) el.appTitle.textContent = title;
+      if (el.greeting) el.greeting.textContent = greetingText();
+    }
+
     function greetingText() {
       const h = new Date().getHours();
       const part = h < 5 ? 'Gute Nacht' : h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend';
       const date = new Date().toLocaleDateString('de-CH', { day: 'numeric', month: 'long', year: 'numeric' });
-      return part + ' – heute ist der ' + date;
+      const name = displayName();
+      return part + (name ? ', ' + name : '') + ' – heute ist der ' + date;
     }
 
     /* ============================================================
@@ -1073,6 +1131,7 @@
     }
 
     function render() {
+      applyIdentity();
       renderStats();
       renderList();
       renderHistory();
