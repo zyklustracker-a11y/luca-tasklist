@@ -87,6 +87,17 @@
     .safe-top { padding-top: max(2rem, env(safe-area-inset-top)); }
     .safe-bottom { padding-bottom: max(3rem, calc(env(safe-area-inset-bottom) + 2rem)); }
 
+    /* Stapelreihenfolge aller Überlagerungen – bewusst hier und nicht über
+       Tailwind-Klassen. Die vorkompilierte tailwind.css enthält nur die
+       z-index-Werte, die beim letzten Build schon im HTML standen; eine neue
+       Klasse wie z-[120] bliebe wirkungslos, und man merkt es erst im Betrieb.
+       Der Toast steht ganz oben: fast jede Bestätigung entsteht in einem
+       offenen Fenster, und darunter würde man sie nie sehen. */
+    #settings-modal { z-index: 90; }
+    #onboarding-modal { z-index: 95; }
+    #celebration-overlay { z-index: 100; }
+    #toast { z-index: 120; }
+
     .habit-checkbox {
       appearance: none;
       width: 1.625rem;
@@ -410,7 +421,7 @@
   </div>
 
   <!-- Einstellungen -->
-  <div id="settings-modal" class="fixed inset-0 z-[90] hidden">
+  <div id="settings-modal" class="fixed inset-0 hidden">
     <div id="settings-backdrop" class="absolute inset-0 bg-black/60 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
     <div class="absolute inset-0 flex items-end justify-center px-4 pt-10 sm:items-center sm:p-6"
          style="padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))">
@@ -518,7 +529,7 @@
   <!-- Onboarding: Name beim ersten Login bestätigen. Wird nur gezeigt, wenn
        im Profil des Kontos noch kein Name steht. Das Feld ist mit dem
        Vornamen aus dem Google-Konto vorbefüllt – nie leer. -->
-  <div id="onboarding-modal" class="fixed inset-0 z-[95] hidden">
+  <div id="onboarding-modal" class="fixed inset-0 hidden">
     <div id="onboarding-backdrop" class="absolute inset-0 bg-black/70 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
     <div class="absolute inset-0 flex items-end justify-center px-4 pt-10 sm:items-center sm:p-6"
          style="padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))">
@@ -549,7 +560,7 @@
 
   <!-- Celebration -->
   <div id="celebration-overlay"
-    class="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-black/25 opacity-0 backdrop-blur-[2px] transition-opacity duration-500"
+    class="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/25 opacity-0 backdrop-blur-[2px] transition-opacity duration-500"
     aria-hidden="true">
     <div id="confetti-container" class="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true"></div>
     <div id="celebration-message"
@@ -561,9 +572,11 @@
     </div>
   </div>
 
-  <!-- Toast -->
+  <!-- Toast. Muss ÜBER allen Dialogen liegen (Einstellungen z-90,
+       Onboarding z-95, Feier z-100): Fast jede Bestätigung entsteht in einem
+       offenen Fenster – lag der Toast darunter, sah man sie nie. -->
   <div id="toast"
-    class="pointer-events-none fixed left-1/2 z-50 flex -translate-x-1/2 translate-y-4 items-center gap-3 rounded-xl border border-accent/30 bg-surface-800 px-5 py-3 text-sm font-medium text-accent-glow opacity-0 shadow-glow transition-all duration-300"
+    class="pointer-events-none fixed left-1/2 flex -translate-x-1/2 translate-y-4 items-center gap-3 rounded-xl border border-accent/30 bg-surface-800 px-5 py-3 text-sm font-medium text-accent-glow opacity-0 shadow-glow transition-all duration-300"
     style="bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 1rem))" role="status">
     <span id="toast-text"></span>
     <button id="toast-action" type="button" class="hidden shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent-glow transition hover:bg-accent/25"></button>
@@ -2015,7 +2028,12 @@
       const name = normalizeText(rawName).slice(0, 60);
       applyProfile({ displayName: name });
       if (window.__taskSync && window.__taskSync.saveProfile) {
-        window.__taskSync.saveProfile({ displayName: name });
+        // Lokal ist der Name schon sicher. Klappt zusätzlich die Cloud nicht,
+        // sagen wir das ehrlich hinterher – sonst stünde er auf dem nächsten
+        // Gerät wieder anders da, ohne dass jemand ahnt, warum.
+        window.__taskSync.saveProfile({ displayName: name }).then(function (ok) {
+          if (ok === false) showToast('Nur auf diesem Gerät gespeichert – keine Verbindung');
+        });
       }
       return name;
     }
@@ -2181,6 +2199,11 @@
       return user.name || user.email || 'angemeldet';
     }
 
+    // Beim Start meldet Firebase eine bestehende Anmeldung einmal von selbst.
+    // Das ist keine frische Anmeldung und braucht keine Meldung – erst danach
+    // ist ein Wechsel wirklich eine Handlung des Nutzers.
+    let authResolved = false;
+
     // Zustände: loading | signedout | signing | signedin | error | unavailable
     function setAuthUi(info) {
       const status = info && info.status;
@@ -2189,7 +2212,11 @@
       // Benachrichtigungen angeboten wird – also beides zusammen aktualisieren.
       const wasSignedIn = signedIn;
       signedIn = status === 'signedin';
-      if (signedIn && !wasSignedIn) syncDeviceOnLogin();
+      if (signedIn && !wasSignedIn) {
+        syncDeviceOnLogin();
+        if (authResolved) showToast('Angemeldet als ' + accountName(info.user));
+      }
+      if (status && status !== 'loading') authResolved = true;
       paintAll();
 
       el.accountBadge.classList.add('hidden');
