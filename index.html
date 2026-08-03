@@ -1962,6 +1962,7 @@
     function openSettings() {
       el.settingsModal.classList.remove('hidden');
       syncProfileInputs();
+      renderStorageNote();
       paintAll();
       requestAnimationFrame(function () {
         el.settingsBackdrop.classList.remove('opacity-0');
@@ -2324,21 +2325,39 @@
     setInterval(checkDayChange, 60000);
     window.addEventListener('pagehide', flushSave);
 
+    // null = noch nicht ermittelt. Wird einmal beim Start bestimmt und dann
+    // wiederverwendet, damit ein erneutes Öffnen der Einstellungen nicht jedes
+    // Mal wieder beim Browser nachfragt.
+    let storagePersisted = null;
+
+    /**
+     * Wo die Daten liegen – abhängig davon, ob ein Konto angemeldet ist.
+     * Mit Konto ist die Cloud führend und das Gerät nur noch die Kopie; ohne
+     * Konto gibt es tatsächlich nur die lokale Ablage.
+     */
+    function storageNoteText() {
+      const base = signedIn
+        ? 'Deine Aufgaben liegen in deinem Google-Konto und erscheinen auf jedem Gerät, auf dem du dich damit anmeldest. Eine Kopie bleibt zusätzlich hier, damit die App offline funktioniert.'
+        : 'Alles liegt nur auf diesem Gerät (IndexedDB + localStorage). Melde dich oben mit Google an, damit deine Aufgaben auch auf anderen Geräten erscheinen.';
+      if (storagePersisted === true) return base + ' Der lokale Speicher ist als dauerhaft markiert.';
+      if (storagePersisted === false) return base + ' Tipp: Ab und zu ein Backup speichern.';
+      return base;
+    }
+
+    function renderStorageNote() {
+      if (el.storageNote) el.storageNote.textContent = storageNoteText();
+    }
+
     function describeStorage() {
-      const parts = ['Alles liegt lokal auf diesem Gerät (IndexedDB + localStorage).'];
-      if (navigator.storage && navigator.storage.persist) {
+      renderStorageNote();
+      if (navigator.storage && navigator.storage.persisted) {
         navigator.storage.persisted().then(function (already) {
           if (already) return true;
-          return navigator.storage.persist();
+          return navigator.storage.persist ? navigator.storage.persist() : false;
         }).then(function (granted) {
-          el.storageNote.textContent = parts[0] + (granted
-            ? ' Der Speicher ist als dauerhaft markiert.'
-            : ' Tipp: Ab und zu ein Backup speichern.');
-        }).catch(function () {
-          el.storageNote.textContent = parts[0];
-        });
-      } else {
-        el.storageNote.textContent = parts[0];
+          storagePersisted = !!granted;
+          renderStorageNote();
+        }).catch(function () {});
       }
     }
 
