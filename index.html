@@ -62,7 +62,7 @@
   <!-- Vorab kompiliertes Tailwind, selbst gehostet – keine Laufzeit-Abhängigkeit
        zum CDN, offline-fest und produktionstauglich. Neu erzeugen mit:
        npx tailwindcss@3 -c tools/tailwind.config.js -i tools/input.css -o tailwind.css --minify -->
-  <link rel="stylesheet" href="./tailwind.css?v=11" />
+  <link rel="stylesheet" href="./tailwind.css?v=12" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Fonts nicht-blockierend laden: media=print + onload schaltet auf all.
@@ -485,11 +485,12 @@
             </button>
           </section>
 
-          <!-- Google-Konto: Anmelden & geräteübergreifend synchronisieren -->
-          <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
+          <!-- Konto: Anmelden & geräteübergreifend synchronisieren.
+               Zwei gleichwertige Wege: Google oder E-Mail mit Passwort. -->
+          <section id="account-section" class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
-                <p class="text-sm font-semibold text-slate-200">Google-Konto</p>
+                <p class="text-sm font-semibold text-slate-200">Konto</p>
                 <p id="account-status" class="mt-1 text-xs leading-relaxed text-slate-400">Wird geladen …</p>
               </div>
               <span id="account-badge" class="hidden shrink-0 rounded-full border border-accent/30 bg-accent-muted/30 px-3 py-1 text-xs font-medium text-accent-glow">Synchronisiert</span>
@@ -505,6 +506,34 @@
               </svg>
               <span>Mit Google anmelden</span>
             </button>
+
+            <!-- Anmeldung mit E-Mail und Passwort. Zweiter, gleichwertiger Weg
+                 für alle ohne Google-Konto. -->
+            <div id="account-form" class="mt-3 hidden">
+              <p class="mb-3 text-center text-xs text-slate-500">oder mit E-Mail</p>
+              <label for="account-email" class="sr-only">E-Mail-Adresse</label>
+              <input id="account-email" type="email" autocomplete="email" inputmode="email"
+                autocapitalize="none" spellcheck="false" enterkeyhint="next" placeholder="E-Mail-Adresse"
+                class="w-full rounded-xl border border-white/10 bg-surface-700 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+              <label for="account-password" class="sr-only">Passwort</label>
+              <input id="account-password" type="password" autocomplete="current-password"
+                enterkeyhint="done" placeholder="Passwort (mind. 6 Zeichen)"
+                class="mt-2 w-full rounded-xl border border-white/10 bg-surface-700 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+              <p id="account-error" class="mt-2 hidden text-xs leading-relaxed text-amber-400"></p>
+              <button id="account-submit" type="button"
+                class="mt-3 w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98] disabled:opacity-60">
+                Anmelden
+              </button>
+              <button id="account-toggle" type="button"
+                class="mt-2 w-full rounded-xl px-3 py-2 text-xs font-medium text-slate-400 transition hover:text-slate-200">
+                Noch kein Konto? Hier registrieren
+              </button>
+              <button id="account-reset" type="button"
+                class="w-full rounded-xl px-3 py-1 text-xs font-medium text-slate-500 transition hover:text-slate-300">
+                Passwort vergessen?
+              </button>
+            </div>
+
             <button id="account-signout" type="button"
               class="mt-3 hidden w-full rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:border-white/20 hover:text-slate-200 active:scale-[0.99]">
               Abmelden
@@ -859,10 +888,18 @@
       importBtn: document.getElementById('import-btn'),
       importFile: document.getElementById('import-file'),
       storageNote: document.getElementById('storage-note'),
+      accountSection: document.getElementById('account-section'),
       accountStatus: document.getElementById('account-status'),
       accountBadge: document.getElementById('account-badge'),
       accountSignin: document.getElementById('account-signin'),
       accountSignout: document.getElementById('account-signout'),
+      accountForm: document.getElementById('account-form'),
+      accountEmail: document.getElementById('account-email'),
+      accountPassword: document.getElementById('account-password'),
+      accountError: document.getElementById('account-error'),
+      accountSubmit: document.getElementById('account-submit'),
+      accountToggle: document.getElementById('account-toggle'),
+      accountReset: document.getElementById('account-reset'),
       pushCard: document.getElementById('push-card'),
       pushCardTitle: document.getElementById('push-card-title'),
       pushCardText: document.getElementById('push-card-text'),
@@ -1742,8 +1779,8 @@
       } else if (info.kind === 'signedout') {
         el.pushCardTitle.textContent = 'Tägliche Erinnerung';
         el.pushCardText.textContent =
-          'Melde dich mit Google an – danach bekommst du täglich eine Meldung mit deinen offenen To-dos, auf allen deinen Geräten.';
-        el.pushCardBtn.textContent = 'Mit Google anmelden';
+          'Melde dich an – mit Google oder mit E-Mail und Passwort. Danach bekommst du täglich eine Meldung mit deinen offenen To-dos, auf allen deinen Geräten.';
+        el.pushCardBtn.textContent = 'Jetzt anmelden';
         el.pushCardBtn.classList.remove('hidden');
       } else if (info.kind === 'blocked') {
         el.pushCardTitle.textContent = 'Benachrichtigungen sind blockiert';
@@ -1931,9 +1968,9 @@
     el.pushCardBtn.addEventListener('click', function () {
       if (reminderBusy) return;
       if (lastKind === 'signedout') {
-        openSettings();
-        if (window.__taskSync && window.__taskSync.signIn) window.__taskSync.signIn();
-        else showToast('Anmeldung lädt noch – kurz warten und erneut tippen.');
+        // Es gibt zwei Anmeldewege – also nicht einen davon erzwingen, sondern
+        // die Einstellungen beim Konto-Abschnitt aufschlagen.
+        openSettings(el.accountSection);
         return;
       }
       reminderBusy = true;
@@ -1959,7 +1996,12 @@
 
     /* ---- Einstellungen-Menü (Zahnrad) öffnen / schließen ---- */
     let settingsOpen = false;
-    function openSettings() {
+    /**
+     * @param {HTMLElement} [scrollTarget] Abschnitt, der nach dem Öffnen
+     *   sichtbar sein soll – etwa das Konto, wenn man von der Karte auf der
+     *   Startseite kommt und sich anmelden will.
+     */
+    function openSettings(scrollTarget) {
       el.settingsModal.classList.remove('hidden');
       syncProfileInputs();
       renderStorageNote();
@@ -1969,6 +2011,12 @@
         el.settingsPanel.classList.remove('opacity-0', 'translate-y-6');
       });
       settingsOpen = true;
+      if (scrollTarget && scrollTarget.scrollIntoView) {
+        // Erst nach der Einblendung – vorher hat das Panel noch keine Höhe.
+        setTimeout(function () {
+          try { scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        }, 320);
+      }
     }
     function closeSettings() {
       settingsOpen = false;
@@ -1976,7 +2024,7 @@
       el.settingsPanel.classList.add('opacity-0', 'translate-y-6');
       setTimeout(function () { if (!settingsOpen) el.settingsModal.classList.add('hidden'); }, 300);
     }
-    el.settingsBtn.addEventListener('click', openSettings);
+    el.settingsBtn.addEventListener('click', function () { openSettings(); });
     el.settingsClose.addEventListener('click', closeSettings);
     // Tippen ausserhalb des Panels schliesst. Auf dem ganzen Overlay lauschen
     // statt nur auf dem Backdrop – der zentrierende Wrapper liegt darüber und
@@ -2200,6 +2248,115 @@
       return user.name || user.email || 'angemeldet';
     }
 
+    /* ---- Anmeldung mit E-Mail und Passwort ----------------------------
+       Gleichwertig zur Google-Anmeldung: Firebase stellt in beiden Fällen
+       dasselbe ID-Token aus, deshalb brauchen weder der Push-Worker noch die
+       Firestore-Regeln davon zu wissen. */
+
+    let accountMode = 'signin';        // 'signin' | 'register'
+    let accountBusy = false;
+
+    function setAccountError(message) {
+      if (!el.accountError) return;
+      el.accountError.textContent = message || '';
+      el.accountError.classList.toggle('hidden', !message);
+    }
+
+    function paintAccountMode() {
+      const registering = accountMode === 'register';
+      el.accountSubmit.textContent = registering ? 'Konto erstellen' : 'Anmelden';
+      el.accountToggle.textContent = registering
+        ? 'Schon ein Konto? Hier anmelden'
+        : 'Noch kein Konto? Hier registrieren';
+      el.accountReset.classList.toggle('hidden', registering);
+      el.accountPassword.setAttribute('autocomplete', registering ? 'new-password' : 'current-password');
+      el.accountPassword.setAttribute('placeholder', registering
+        ? 'Neues Passwort (mind. 6 Zeichen)'
+        : 'Passwort');
+    }
+
+    function submitAccountForm() {
+      if (accountBusy) return;
+      const email = String(el.accountEmail.value || '').trim();
+      const password = String(el.accountPassword.value || '');
+
+      if (!email) {
+        setAccountError('Bitte trag deine E-Mail-Adresse ein.');
+        el.accountEmail.focus();
+        return;
+      }
+      // Vor dem Netzwerkweg prüfen, was wir hier schon wissen – das spart einen
+      // Fehlversuch und erklärt die Regel, statt sie nur abzulehnen.
+      if (password.length < 6) {
+        setAccountError('Das Passwort braucht mindestens 6 Zeichen.');
+        el.accountPassword.focus();
+        return;
+      }
+
+      const sync = window.__taskSync;
+      if (!sync || !sync.signInWithEmail) {
+        setAccountError('Die Anmeldung lädt noch – kurz warten und erneut versuchen.');
+        return;
+      }
+
+      setAccountError('');
+      accountBusy = true;
+      el.accountSubmit.disabled = true;
+      const action = accountMode === 'register'
+        ? sync.registerWithEmail(email, password)
+        : sync.signInWithEmail(email, password);
+
+      Promise.resolve(action).catch(function () {
+        return { ok: false, message: 'Das hat nicht geklappt. Bitte erneut versuchen.' };
+      }).then(function (result) {
+        accountBusy = false;
+        el.accountSubmit.disabled = false;
+        // Der Erfolgsfall meldet sich über setAuthUi von selbst ("Angemeldet
+        // als …") – hier ist dann nichts mehr zu sagen.
+        if (result && result.ok) return;
+        setAccountError((result && result.message) || 'Das hat nicht geklappt.');
+        el.accountPassword.focus();
+      });
+    }
+
+    function requestPasswordReset() {
+      const email = String(el.accountEmail.value || '').trim();
+      if (!email) {
+        setAccountError('Trag zuerst deine E-Mail-Adresse ein, dann schicken wir dir einen Link.');
+        el.accountEmail.focus();
+        return;
+      }
+      const sync = window.__taskSync;
+      if (!sync || !sync.resetPassword) return;
+      Promise.resolve(sync.resetPassword(email)).then(function (result) {
+        if (result && result.ok) {
+          setAccountError('');
+          showToast('E-Mail zum Zurücksetzen verschickt');
+          return;
+        }
+        setAccountError((result && result.message) || 'Das hat nicht geklappt.');
+      });
+    }
+
+    el.accountSubmit.addEventListener('click', submitAccountForm);
+    el.accountReset.addEventListener('click', requestPasswordReset);
+    el.accountToggle.addEventListener('click', function () {
+      accountMode = accountMode === 'register' ? 'signin' : 'register';
+      setAccountError('');
+      paintAccountMode();
+      el.accountEmail.focus();
+    });
+    el.accountEmail.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); el.accountPassword.focus(); }
+    });
+    el.accountPassword.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submitAccountForm(); }
+    });
+    // Gleiche Falle wie beim Namensfeld: auf dem iPhone rutscht das Fenster,
+    // sobald die Tastatur zuklappt, und der Tipp landet ins Leere.
+    el.accountSubmit.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+    paintAccountMode();
+
     // Beim Start meldet Firebase eine bestehende Anmeldung einmal von selbst.
     // Das ist keine frische Anmeldung und braucht keine Meldung – erst danach
     // ist ein Wechsel wirklich eine Handlung des Nutzers.
@@ -2223,24 +2380,32 @@
       el.accountBadge.classList.add('hidden');
       el.accountSignin.classList.add('hidden');
       el.accountSignout.classList.add('hidden');
+      el.accountForm.classList.add('hidden');
       el.accountSignin.disabled = false;
 
       if (status === 'signedin') {
         el.accountBadge.classList.remove('hidden');
         el.accountSignout.classList.remove('hidden');
+        el.accountPassword.value = '';           // Passwort nie stehen lassen
+        setAccountError('');
         el.accountStatus.textContent =
           'Angemeldet als ' + accountName(info.user) + '. Deine Aufgaben werden geräteübergreifend synchronisiert.';
       } else if (status === 'signing') {
         el.accountSignin.classList.remove('hidden');
+        el.accountForm.classList.remove('hidden');
         el.accountSignin.disabled = true;
-        el.accountStatus.textContent = 'Anmeldung läuft – du wirst zu Google weitergeleitet …';
+        el.accountStatus.textContent = info && info.via === 'google'
+          ? 'Anmeldung läuft – eventuell öffnet sich ein Google-Fenster …'
+          : 'Anmeldung läuft …';
       } else if (status === 'error') {
         el.accountSignin.classList.remove('hidden');
+        el.accountForm.classList.remove('hidden');
         el.accountStatus.textContent = (info && info.message) || 'Anmeldung fehlgeschlagen. Bitte erneut versuchen.';
       } else if (status === 'unavailable') {
         el.accountStatus.textContent = 'Synchronisierung gerade nicht verfügbar (offline?). Die App funktioniert lokal normal weiter.';
       } else if (status === 'signedout') {
         el.accountSignin.classList.remove('hidden');
+        el.accountForm.classList.remove('hidden');
         el.accountStatus.textContent = 'Nicht angemeldet. Melde dich an, um deine Aufgaben zwischen mehreren Geräten zu synchronisieren.';
       } else {
         el.accountStatus.textContent = 'Wird geladen …';
@@ -2446,7 +2611,8 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
     import {
       getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
-      onAuthStateChanged, signOut, getAdditionalUserInfo
+      onAuthStateChanged, signOut, getAdditionalUserInfo,
+      createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail
     } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import {
       initializeFirestore, persistentLocalCache, persistentSingleTabManager,
@@ -2515,7 +2681,41 @@
       if (code === 'auth/unauthorized-domain') return 'Diese Adresse ist in Firebase noch nicht als „Authorized domain“ freigegeben.';
       if (code === 'auth/operation-not-supported-in-this-environment' ||
           code === 'auth/popup-blocked') return 'Hier nicht möglich – bitte die Seite in Safari öffnen und dort anmelden.';
+
+      /* E-Mail und Passwort */
+      if (code === 'auth/invalid-email') return 'Diese E-Mail-Adresse sieht nicht richtig aus.';
+      if (code === 'auth/missing-password') return 'Bitte trag dein Passwort ein.';
+      if (code === 'auth/weak-password') return 'Das Passwort braucht mindestens 6 Zeichen.';
+      if (code === 'auth/email-already-in-use') {
+        return 'Für diese Adresse gibt es schon ein Konto. Wechsel oben auf „Hier anmelden“.';
+      }
+      // Firebase fasst falsches Passwort und unbekannte Adresse bewusst zu
+      // invalid-credential zusammen, damit niemand ausprobieren kann, welche
+      // Adressen registriert sind. Diese Unschärfe geben wir so weiter.
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' ||
+          code === 'auth/user-not-found' || code === 'auth/invalid-login-credentials') {
+        return 'E-Mail-Adresse oder Passwort stimmt nicht. Noch kein Konto? Dann unten auf „Hier registrieren“.';
+      }
+      if (code === 'auth/user-disabled') return 'Dieses Konto ist gesperrt.';
+      if (code === 'auth/too-many-requests') {
+        return 'Zu viele Versuche. Warte einen Moment und probier es dann erneut.';
+      }
+      if (code === 'auth/operation-not-allowed') {
+        return 'Anmeldung mit E-Mail ist in Firebase nicht aktiviert (Authentication → Sign-in method).';
+      }
       return 'Anmeldung fehlgeschlagen. Bitte erneut versuchen.';
+    }
+
+    /**
+     * Namensvorschlag aus einer E-Mail-Adresse, für Konten ohne Google-Profil:
+     * "lea.mueller82@example.com" → "Lea". Besser als ein leeres Feld im
+     * Onboarding – ändern kann man es ohnehin.
+     */
+    function nameFromEmail(email) {
+      const local = String(email || '').split('@')[0];
+      const first = local.split(/[^a-zA-ZäöüÄÖÜß]+/).filter(Boolean)[0] || '';
+      if (!first) return '';
+      return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
     }
 
     /* ---- Zusammenführen (rein rechnerisch, ohne Anzeige) ---- */
@@ -2574,7 +2774,7 @@
 
     window.__taskSync = {
       signIn: function () {
-        setUi({ status: 'signing' });
+        setUi({ status: 'signing', via: 'google' });
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
         // Zuerst Popup: klappt in Safari/Chrome zuverlässig. Der Redirect-Weg
@@ -2596,6 +2796,38 @@
           setUi({ status: 'error', message: friendly(err) });
         });
       },
+      /* ---- E-Mail und Passwort ---------------------------------------
+         Geben immer { ok, message } zurück statt zu werfen: die Oberfläche
+         soll den Grund anzeigen können, ohne jeden Aufruf einzupacken. */
+
+      signInWithEmail: function (email, password) {
+        setUi({ status: 'signing', via: 'email' });
+        return signInWithEmailAndPassword(auth, email, password)
+          .then(function () { return { ok: true }; })
+          .catch(function (err) {
+            const message = friendly(err);
+            setUi({ status: 'error', message: message });
+            return { ok: false, message: message };
+          });
+      },
+
+      registerWithEmail: function (email, password) {
+        setUi({ status: 'signing', via: 'email' });
+        return createUserWithEmailAndPassword(auth, email, password)
+          .then(function () { return { ok: true }; })
+          .catch(function (err) {
+            const message = friendly(err);
+            setUi({ status: 'error', message: message });
+            return { ok: false, message: message };
+          });
+      },
+
+      resetPassword: function (email) {
+        return sendPasswordResetEmail(auth, email)
+          .then(function () { return { ok: true }; })
+          .catch(function (err) { return { ok: false, message: friendly(err) }; });
+      },
+
       signOut: function () {
         return signOut(auth).catch(function () {});
       },
@@ -2653,7 +2885,10 @@
             // einfach übernehmen, kein Dialog.
             await setDoc(profileRef, { displayName: local.displayName, updatedAt: Date.now() }, { merge: true });
           } else if (b && b.requestOnboarding) {
-            b.requestOnboarding(pendingGivenName || firstNameOf(user));
+            // Reihenfolge der Vorschläge: Vorname aus dem Google-Profil, sonst
+            // erstes Wort des Anzeigenamens, sonst aus der E-Mail abgeleitet.
+            // Ein Konto mit E-Mail und Passwort hat nämlich keinen Namen.
+            b.requestOnboarding(pendingGivenName || firstNameOf(user) || nameFromEmail(user.email));
           }
         }
       } catch (e) {
