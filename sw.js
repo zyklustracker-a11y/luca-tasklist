@@ -1,6 +1,6 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v13';
+const CACHE_VERSION = 'v14';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [
@@ -33,6 +33,12 @@ self.addEventListener('activate', (event) => {
       ))
       .then(() => self.clients.claim())
   );
+});
+
+// Notausgang, falls skipWaiting beim Install einmal nicht greift: die Seite
+// kann das Übernehmen ausdrücklich anstossen.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 /* ------------------------------------------------------------------
@@ -88,6 +94,10 @@ function reminderText(state) {
   };
 }
 
+// Ziel eines Klicks auf die Benachrichtigung. Absolut aufgelöst, damit
+// openWindow() auch unter GitHub Pages im Unterordner richtig landet.
+const APP_URL = new URL('./index.html', self.registration.scope).href;
+
 self.addEventListener('push', (event) => {
   event.waitUntil(
     readState().then((state) => {
@@ -98,20 +108,30 @@ self.addEventListener('push', (event) => {
         badge: './favicon-32.png',
         tag: 'daily-reminder',
         renotify: true,
-        data: { url: './index.html' },
+        data: { url: APP_URL },
       });
     })
   );
 });
 
+/* Klick auf die Benachrichtigung: ein bereits offenes Fenster der App in den
+   Vordergrund holen und zur Aufgabenliste springen; sonst eines öffnen.
+   Wichtig ist der Vergleich der Adresse – sonst würde ein beliebiges Fenster
+   derselben Herkunft fokussiert. */
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || APP_URL;
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const client of list) {
+        if (new URL(client.url).origin !== new URL(target).origin) continue;
+        // Die Seite selbst zur Liste scrollen lassen – der Service Worker
+        // kennt das DOM nicht.
+        client.postMessage({ type: 'SHOW_TASKS' });
         if ('focus' in client) return client.focus();
       }
-      return self.clients.openWindow('./index.html');
+      return self.clients.openWindow(target);
     })
   );
 });
