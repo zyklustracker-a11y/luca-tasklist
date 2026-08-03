@@ -406,6 +406,23 @@
         </div>
 
         <div class="space-y-4 overflow-y-auto px-5 py-5">
+          <!-- Profil: Anzeigename -->
+          <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
+            <p class="text-sm font-semibold text-slate-200">Dein Name</p>
+            <p id="profile-hint" class="mt-1 text-xs leading-relaxed text-slate-400">
+              Steht im Titel der App und in der Begrüßung.
+            </p>
+            <div class="mt-3 flex gap-2">
+              <label for="profile-name" class="sr-only">Dein Name</label>
+              <input id="profile-name" type="text" maxlength="60" placeholder="z. B. Lea" enterkeyhint="done"
+                class="min-w-0 flex-1 rounded-xl border border-white/10 bg-surface-700 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+              <button id="profile-save" type="button"
+                class="shrink-0 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">
+                Speichern
+              </button>
+            </div>
+          </section>
+
           <!-- Benachrichtigungen -->
           <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
             <div class="flex items-center justify-between gap-4">
@@ -471,6 +488,38 @@
             <p id="storage-note" class="mt-3 text-xs leading-relaxed text-slate-600"></p>
           </section>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboarding: Name beim ersten Login bestätigen. Wird nur gezeigt, wenn
+       im Profil des Kontos noch kein Name steht. Das Feld ist mit dem
+       Vornamen aus dem Google-Konto vorbefüllt – nie leer. -->
+  <div id="onboarding-modal" class="fixed inset-0 z-[95] hidden">
+    <div id="onboarding-backdrop" class="absolute inset-0 bg-black/70 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
+    <div class="absolute inset-0 flex items-end justify-center px-4 pt-10 sm:items-center sm:p-6"
+         style="padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))">
+      <div id="onboarding-panel"
+        class="relative w-full max-w-sm translate-y-6 rounded-3xl border border-accent/20 bg-surface-800 p-6 opacity-0 shadow-card transition-all duration-300"
+        role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <h2 id="onboarding-title" class="text-xl font-semibold text-white">Willkommen!</h2>
+        <p class="mt-2 text-sm leading-relaxed text-slate-400">
+          Wie sollen wir dich nennen? Der Name steht danach im Titel deiner Liste –
+          ändern kannst du ihn jederzeit in den Einstellungen.
+        </p>
+        <label for="onboarding-name" class="sr-only">Dein Name</label>
+        <input id="onboarding-name" type="text" maxlength="60" autocomplete="given-name" enterkeyhint="done"
+          class="mt-4 w-full rounded-xl border border-white/10 bg-surface-700 px-4 py-3 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+          placeholder="Dein Vorname" />
+        <p id="onboarding-preview" class="mt-2 min-h-[1.25rem] text-xs text-slate-500"></p>
+        <button id="onboarding-save" type="button"
+          class="mt-4 w-full rounded-xl bg-gradient-to-r from-accent-dim to-accent py-3.5 font-semibold text-surface-900 transition hover:from-accent hover:to-accent-glow active:scale-[0.98]">
+          Passt so
+        </button>
+        <button id="onboarding-skip" type="button"
+          class="mt-2 w-full rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:text-slate-300">
+          Ohne Namen fortfahren
+        </button>
       </div>
     </div>
   </div>
@@ -783,6 +832,16 @@
       reminderTimeRow: document.getElementById('reminder-time-row'),
       notifyTime: document.getElementById('notify-time'),
       reminderTest: document.getElementById('reminder-test'),
+      profileName: document.getElementById('profile-name'),
+      profileSave: document.getElementById('profile-save'),
+      profileHint: document.getElementById('profile-hint'),
+      onboardingModal: document.getElementById('onboarding-modal'),
+      onboardingBackdrop: document.getElementById('onboarding-backdrop'),
+      onboardingPanel: document.getElementById('onboarding-panel'),
+      onboardingName: document.getElementById('onboarding-name'),
+      onboardingPreview: document.getElementById('onboarding-preview'),
+      onboardingSave: document.getElementById('onboarding-save'),
+      onboardingSkip: document.getElementById('onboarding-skip'),
       settingsBtn: document.getElementById('settings-btn'),
       settingsModal: document.getElementById('settings-modal'),
       settingsPanel: document.getElementById('settings-panel'),
@@ -1683,6 +1742,7 @@
     let settingsOpen = false;
     function openSettings() {
       el.settingsModal.classList.remove('hidden');
+      syncProfileInputs();
       paintReminder();
       requestAnimationFrame(function () {
         el.settingsBackdrop.classList.remove('opacity-0');
@@ -1709,9 +1769,117 @@
     });
 
     /* ============================================================
+       13a. Profil: Anzeigename, Onboarding, Einstellungen
+
+       Führend ist das Dokument profiles/<uid> in Firestore – der Name folgt
+       also dem Konto, nicht dem Gerät. Lokal liegt er zusätzlich, damit der
+       Titel schon beim ersten Bild steht und offline nicht zurückfällt.
+       ============================================================ */
+
+    function syncProfileInputs() {
+      if (el.profileName && document.activeElement !== el.profileName) {
+        el.profileName.value = displayName();
+      }
+      if (el.profileHint) {
+        el.profileHint.textContent = displayName()
+          ? 'Steht im Titel der App: „' + trackerTitle() + '“.'
+          : 'Ohne Namen heißt die App einfach „Task Tracker“.';
+      }
+    }
+
+    /** Übernimmt ein Profil lokal und in der Anzeige – schreibt NICHT in die Cloud. */
+    function applyProfile(patch) {
+      state.profile = sanitizeProfile(Object.assign({}, state.profile, patch));
+      flushSave();
+      applyIdentity();
+      syncProfileInputs();
+    }
+
+    /** Setzt den Namen und meldet ihn zusätzlich ans Konto in der Cloud. */
+    function saveDisplayName(rawName) {
+      const name = normalizeText(rawName).slice(0, 60);
+      applyProfile({ displayName: name });
+      if (window.__taskSync && window.__taskSync.saveProfile) {
+        window.__taskSync.saveProfile({ displayName: name });
+      }
+      return name;
+    }
+
+    /* ---- Onboarding-Dialog beim ersten Login ---- */
+    let onboardingOpen = false;
+
+    function updateOnboardingPreview() {
+      const owner = possessive(el.onboardingName.value);
+      el.onboardingPreview.textContent = owner
+        ? 'Deine Liste heißt dann „' + owner + ' Task Tracker“.'
+        : 'Ohne Namen heißt sie einfach „Task Tracker“.';
+    }
+
+    function openOnboarding(suggestion) {
+      if (onboardingOpen) return;
+      onboardingOpen = true;
+      el.onboardingName.value = normalizeText(suggestion).slice(0, 60);
+      updateOnboardingPreview();
+      el.onboardingModal.classList.remove('hidden');
+      requestAnimationFrame(function () {
+        el.onboardingBackdrop.classList.remove('opacity-0');
+        el.onboardingPanel.classList.remove('opacity-0', 'translate-y-6');
+      });
+      // Erst nach der Einblendung fokussieren – sonst schiebt iOS die Tastatur
+      // vor ein noch unsichtbares Feld.
+      setTimeout(function () {
+        try { el.onboardingName.focus(); el.onboardingName.select(); } catch (e) {}
+      }, 350);
+    }
+
+    function closeOnboarding() {
+      onboardingOpen = false;
+      el.onboardingBackdrop.classList.add('opacity-0');
+      el.onboardingPanel.classList.add('opacity-0', 'translate-y-6');
+      setTimeout(function () { if (!onboardingOpen) el.onboardingModal.classList.add('hidden'); }, 300);
+    }
+
+    function confirmOnboarding() {
+      const name = normalizeText(el.onboardingName.value);
+      if (!name) {
+        el.onboardingName.focus();
+        showToast('Gib einen Namen ein – oder wähl „Ohne Namen fortfahren“.');
+        return;
+      }
+      saveDisplayName(name);
+      closeOnboarding();
+      showToast('Willkommen, ' + name + '!');
+    }
+
+    el.onboardingName.addEventListener('input', updateOnboardingPreview);
+    el.onboardingName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); confirmOnboarding(); }
+    });
+    el.onboardingSave.addEventListener('click', confirmOnboarding);
+    el.onboardingSkip.addEventListener('click', function () {
+      // Leerer Name ist eine gültige Entscheidung: der Titel bleibt
+      // „Task Tracker". Gespeichert wird sie trotzdem, damit der Dialog nicht
+      // bei jedem Start wiederkommt.
+      saveDisplayName('');
+      closeOnboarding();
+      showToast('Alles klar – du kannst den Namen später in den Einstellungen setzen.');
+    });
+
+    /* ---- Name in den Einstellungen ändern ---- */
+    function saveProfileFromSettings() {
+      const name = saveDisplayName(el.profileName.value);
+      syncProfileInputs();
+      showToast(name ? 'Name gespeichert' : 'Name entfernt');
+    }
+    el.profileSave.addEventListener('click', saveProfileFromSettings);
+    el.profileName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); el.profileName.blur(); saveProfileFromSettings(); }
+    });
+
+    /* ============================================================
        13b. Google-Konto & Cloud-Sync (Firebase)
 
-       Die eigentliche Firebase-Logik steckt im <script type="module"> ganz
+       Die eigentliche Firebase-Logik steckt im Modul-Skript ganz
        unten. Hier liegt nur die Brücke: die App reicht ihren Stand nach oben
        (getSyncPayload), übernimmt Änderungen aus der Cloud (applySyncPayload –
        schreibt AUCH lokal, damit die Benachrichtigungen weiter stimmen) und
@@ -1799,6 +1967,28 @@
       getSyncPayload: getSyncPayload,
       applySyncPayload: applySyncPayload,
       setAuthUi: setAuthUi,
+
+      /* ---- Profil ---- */
+      getProfile: function () {
+        return { displayName: displayName(), uid: (state.profile && state.profile.uid) || null };
+      },
+      setProfile: applyProfile,
+
+      // Meldet sich ein ANDERES Konto an, darf der Name des vorherigen nicht
+      // stehen bleiben – bis das Profil aus der Cloud da ist, gilt der
+      // neutrale Titel.
+      beginUserSession: function (uid) {
+        if (state.profile && state.profile.uid && state.profile.uid !== uid) {
+          applyProfile({ displayName: '', uid: uid });
+        } else {
+          applyProfile({ uid: uid });
+        }
+      },
+
+      requestOnboarding: function (suggestion) {
+        if (displayName()) return;
+        openOnboarding(suggestion);
+      },
     };
 
     el.accountSignin.addEventListener('click', function () {
@@ -1907,7 +2097,7 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
     import {
       getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
-      onAuthStateChanged, signOut
+      onAuthStateChanged, signOut, getAdditionalUserInfo
     } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import {
       initializeFirestore, persistentLocalCache, persistentSingleTabManager,
@@ -1939,6 +2129,30 @@
 
     function bridge() { return window.__taskApp || null; }
     function setUi(info) { const b = bridge(); if (b && b.setAuthUi) b.setAuthUi(info); }
+
+    /* ---- Profil (profiles/<uid>) ------------------------------------
+       Bewusst ein EIGENES Dokument, getrennt von users/<uid>: dort schreibt
+       der Aufgaben-Sync mit setDoc() das komplette Dokument neu und würde ein
+       mitgeführtes Profil bei jeder Änderung überbügeln. */
+    let profileRef = null;
+    let unsubProfile = null;
+    // Vorname aus dem Google-Konto, nur direkt nach einer frischen Anmeldung
+    // verfügbar – dient als Vorschlag im Onboarding-Dialog.
+    let pendingGivenName = '';
+
+    function rememberGivenName(result) {
+      try {
+        const info = result ? getAdditionalUserInfo(result) : null;
+        const given = info && info.profile && info.profile.given_name;
+        if (typeof given === 'string' && given.trim()) pendingGivenName = given.trim();
+      } catch (e) {/* nicht schlimm – wir haben den Fallback unten */}
+      return result;
+    }
+
+    function firstNameOf(user) {
+      const full = (user && user.displayName ? String(user.displayName) : '').trim();
+      return full ? full.split(/\s+/)[0] : '';
+    }
     function localPayload() {
       const b = bridge();
       return (b && b.getSyncPayload) ? b.getSyncPayload()
@@ -2018,7 +2232,7 @@
         // scheitert zunehmend daran, dass Browser den Speicher-Zugriff des
         // Login-Helfers auf firebaseapp.com (andere Domain) blockieren. Geht das
         // Popup nicht (installierte iOS-App), automatisch auf Redirect ausweichen.
-        return signInWithPopup(auth, provider).catch(function (err) {
+        return signInWithPopup(auth, provider).then(rememberGivenName).catch(function (err) {
           const code = err && err.code ? String(err.code) : '';
           if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
             setUi({ status: 'signedout' });
@@ -2040,20 +2254,70 @@
         clearTimeout(pushTimer);
         pushTimer = setTimeout(doPush, 500);
       },
+
+      /** Teil-Aktualisierung des Profils (Name, Uhrzeit, Zeitzone). */
+      saveProfile: function (patch) {
+        if (!profileRef || !patch) return Promise.resolve(false);
+        const data = Object.assign({}, patch, { updatedAt: Date.now() });
+        return setDoc(profileRef, data, { merge: true })
+          .then(function () { return true; })
+          .catch(function () { return false; });
+      },
     };
 
     // Rückkehr vom Google-Redirect abfangen (Fehler sichtbar machen; der Nutzer
     // selbst kommt über onAuthStateChanged an).
-    getRedirectResult(auth).catch(function (err) {
+    getRedirectResult(auth).then(rememberGivenName).catch(function (err) {
       setUi({ status: 'error', message: friendly(err) });
     });
 
+    /**
+     * Profil des Kontos laden. Existiert das Dokument noch nicht, ist das
+     * der erste Login: entweder wird ein lokal schon vorhandener Name
+     * hochgeschrieben, oder der Onboarding-Dialog fragt danach – vorbefüllt
+     * mit dem Vornamen aus dem Google-Konto.
+     */
+    async function initProfile(user) {
+      const b = bridge();
+      profileRef = doc(db, 'profiles', user.uid);
+      if (b && b.beginUserSession) b.beginUserSession(user.uid);
+
+      try {
+        const snap = await getDoc(profileRef);
+        if (snap.exists()) {
+          // Vorhandenes Profil gewinnt – auch ein bewusst leerer Name.
+          if (b && b.setProfile) b.setProfile(snap.data());
+        } else {
+          const local = (b && b.getProfile) ? b.getProfile() : { displayName: '' };
+          if (local.displayName) {
+            // Name war schon lokal gesetzt (z. B. offline eingegeben) –
+            // einfach übernehmen, kein Dialog.
+            await setDoc(profileRef, { displayName: local.displayName, updatedAt: Date.now() }, { merge: true });
+          } else if (b && b.requestOnboarding) {
+            b.requestOnboarding(pendingGivenName || firstNameOf(user));
+          }
+        }
+      } catch (e) {
+        // Offline: der Live-Listener unten holt das Profil nach, sobald es geht.
+      }
+      pendingGivenName = '';
+
+      // Namensänderungen von anderen Geräten sofort übernehmen.
+      unsubProfile = onSnapshot(profileRef, function (snap) {
+        if (!snap.exists() || snap.metadata.hasPendingWrites) return;
+        const b2 = bridge();
+        if (b2 && b2.setProfile) b2.setProfile(snap.data());
+      }, function () {/* Listen-Fehler ignorieren */});
+    }
+
     onAuthStateChanged(auth, async function (user) {
       if (unsub) { unsub(); unsub = null; }
+      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
       lastSyncedJson = null;
 
       if (!user) {
         userRef = null;
+        profileRef = null;
         setUi({ status: 'signedout' });
         return;
       }
@@ -2063,6 +2327,8 @@
       // Warten, bis der lokale Stand geladen ist – sonst würden wir mit leerem
       // Stand zusammenführen und die lokalen Tasks verlieren.
       try { await window.__taskAppReady; } catch (e) {}
+
+      await initProfile(user);
 
       userRef = doc(db, 'users', user.uid);
 
