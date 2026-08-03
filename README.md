@@ -56,22 +56,71 @@ Safari öffnen → Teilen → *Zum Home-Bildschirm*. Das Symbol kommt aus
 `apple-touch-icon.png`, der Name darunter aus dem Meta-Tag
 `apple-mobile-web-app-title` in der `index.html`.
 
+## Mehrere Nutzer
+
+Die Adresse der App kann man weitergeben. Wer sie öffnet und sich mit seinem
+Google-Konto anmeldet, bekommt eine **eigene, isolierte Liste** und eigene
+Erinnerungen. Ohne Anmeldung läuft die App wie bisher rein lokal auf dem Gerät.
+
+**Wie die Trennung durchgesetzt wird.** Nicht im Frontend, sondern an zwei
+Stellen serverseitig:
+
+- **Datenbank:** Die Firestore-Regeln in [`firestore.rules`](firestore.rules)
+  erlauben jedem Konto ausschliesslich `users/<uid>` und `profiles/<uid>`,
+  alles andere ist gesperrt. Die Prüfung läuft bei Google – ein manipuliertes
+  Frontend oder ein direkter API-Aufruf kommt trotzdem nicht an fremde Daten.
+- **Push-Worker:** Jeder Aufruf verlangt ein Firebase-ID-Token. Der Worker
+  prüft dessen Signatur selbst und nimmt die Benutzerkennung **aus dem Token**,
+  nie aus der Anfrage. Fremde Abos sind damit technisch nicht erreichbar.
+
+Der **Name** kommt aus dem Profil des Kontos (`profiles/<uid>`) und erscheint
+im Titel, im `document.title` und in der Begrüßung: „Leas Task Tracker“.
+Namen auf s/ß/x/z bekommen nach deutscher Regel nur ein Apostroph
+(„Lukas’ Task Tracker“). Ohne Namen heisst die App schlicht „Task Tracker“.
+
+> Das **PWA-Manifest** bleibt bewusst neutral („Task Tracker“). Es wird beim
+> Installieren einmal gelesen und ist danach geräteweit fest – ein
+> personalisierter Wert wäre für alle gleich und liesse sich später nicht mehr
+> ändern. Dasselbe gilt für `apple-mobile-web-app-title` („Tasks“), den Namen
+> unter dem iPhone-Symbol.
+
 ## Tägliche Erinnerung
 
 Die App schickt morgens eine Benachrichtigung mit der Zahl der offenen
-To-dos – auch wenn sie geschlossen ist.
+To-dos – auch wenn sie geschlossen ist. Pro Nutzer, auf allen seinen Geräten.
 
 **Wie es zusammenhängt.** GitHub Pages liefert nur Dateien aus und kann
 nichts zu einer Uhrzeit auslösen. Den Anstoss gibt deshalb ein **Cloudflare
 Worker** (Ordner `worker/`) mit einem Cron-Trigger im kostenlosen Tarif. Der
 Worker schickt einen **leeren** Push – ganz ohne Inhalt. Den Text baut der
-Service Worker auf dem iPhone selbst, denn nur er kommt an die IndexedDB und
-weiss, wie viele Tasks offen sind. Der Server erfährt nichts über deine Daten.
+Service Worker auf dem Gerät selbst, denn nur er kommt an die IndexedDB und
+weiss, wie viele Tasks offen sind. Der Server erfährt nichts über die Aufgaben.
 
 Die App meldet ihr Push-Abo samt gewünschter **Uhrzeit und Zeitzone**
-automatisch beim Worker an; der speichert beides in Cloudflare Workers KV. Der
-Cron-Lauf rechnet die Uhrzeit gegen deine Zeitzone und sendet, wenn es so weit
-ist – Zeitumstellung inklusive.
+automatisch beim Worker an; der speichert beides in Cloudflare Workers KV –
+ein Eintrag pro Gerät, beliebig viele Geräte pro Nutzer. Der Cron-Lauf geht
+alle 15 Minuten **alle Nutzer** durch, rechnet deren Uhrzeit gegen deren
+Zeitzone und sendet, wenn es so weit ist – Zeitumstellung inklusive. Ein
+Fehler bei einem Nutzer bricht den Lauf für die anderen nicht ab, und Abos,
+die mit 404/410 antworten, fliegen aus der Datenbank.
+
+Die Uhrzeit steht im **Profil des Kontos**, nicht am Gerät – stellt man sie am
+Laptop um, gilt sie auch am iPhone.
+
+### Der Weg zur ersten Benachrichtigung
+
+Es wird **nicht** ungefragt beim Seitenaufruf nach Erlaubnis gefragt. Auf der
+Startseite steht stattdessen eine Karte mit einem sichtbaren Knopf
+**„Benachrichtigungen aktivieren“**. Sie zeigt jeweils genau den Zustand an,
+in dem man gerade steckt: nicht angemeldet, vom Browser blockiert (samt
+Anleitung, wie man das zurücksetzt), ausgeschaltet – oder sie verschwindet,
+weil alles läuft.
+
+**Auf dem iPhone** braucht es zwei Dinge: mindestens **iOS 16.4** und die App
+muss über *Teilen → Zum Home-Bildschirm* installiert und **von dort geöffnet**
+worden sein. Im normalen Safari-Tab erlaubt Apple keinen Web-Push. Erkennt die
+App diesen Fall, zeigt sie an Stelle des Knopfes eine nummerierte
+Schritt-für-Schritt-Anleitung.
 
 ### Server einrichten (einmalig)
 
@@ -80,6 +129,123 @@ Die vollständige Schritt-für-Schritt-Anleitung mit allen Befehlen steht in
 installieren, KV-Namespace erstellen, privaten VAPID-Schlüssel als Secret
 setzen, deployen und zum Schluss die Worker-Adresse als `WORKER_URL` in
 `index.html` eintragen.
+
+## Variablen und Secrets
+
+Der **private** VAPID-Schlüssel verlässt den Server nie – er liegt als
+Cloudflare-Secret, nicht im Repository. Der öffentliche Schlüssel und die
+Firebase-Web-Config sind bewusst kein Geheimnis: Sie stehen im ausgelieferten
+HTML und sind für jeden lesbar. Geschützt wird nicht durch Verstecken, sondern
+durch die Firestore-Regeln und die Token-Prüfung im Worker.
+
+**Cloudflare-Secret** (`wrangler secret put …`, nie committen):
+
+| Name | Wert |
+|---|---|
+| `VAPID_PRIVATE_KEY` | privater VAPID-Schlüssel (`npx web-push generate-vapid-keys`) |
+
+**Cloudflare-Variablen** (`worker/wrangler.toml`, `[vars]`):
+
+| Name | Wert |
+|---|---|
+| `VAPID_PUBLIC_KEY` | öffentlicher VAPID-Schlüssel, identisch zu dem in `index.html` |
+| `VAPID_SUBJECT` | `mailto:` oder `https:` als Absender-Kennung (RFC 8292) |
+| `FIREBASE_PROJECT_ID` | `projectId` aus `firebaseConfig` – daran erkennt der Worker gültige Anmeldungen |
+| `ALLOWED_ORIGIN` | optional: nur Anfragen von dieser Adresse zulassen |
+
+**GitHub-Repository-Secrets** (nur für den Deploy-Workflow unter *Actions*):
+
+| Name | Wert |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Token mit *Workers Scripts Edit* + *Workers KV Storage Edit* |
+| `VAPID_PRIVATE_KEY` | derselbe private Schlüssel wie oben |
+
+**Im Code eingetragen** (`index.html`, öffentlich und unkritisch):
+`WORKER_URL`, `VAPID_PUBLIC_KEY`, `firebaseConfig`.
+
+## Inbetriebnahme und Migration
+
+Bestehende Daten bleiben unangetastet – es gibt nichts umzuschreiben und
+nichts zu löschen.
+
+1. **Firestore-Regeln veröffentlichen.** Firebase-Konsole → *Firestore
+   Database* → *Regeln* → Inhalt von [`firestore.rules`](firestore.rules)
+   einfügen → *Veröffentlichen*. **Ohne diesen Schritt ist die Trennung nicht
+   durchgesetzt.**
+2. **Worker deployen.** Reiter *Actions* → „Worker deployen" → *Run workflow*.
+   Oder im Ordner `worker/`: `wrangler deploy`.
+3. **App ausrollen.** Push auf `main` genügt, GitHub Pages liefert die neue
+   Fassung aus. Der Service Worker holt sie beim nächsten Öffnen selbst und
+   lädt die Seite einmal neu.
+4. **Erinnerung einmal aus- und wieder einschalten** (Zahnrad → *Morgens
+   erinnern*). Damit wandert das Abo dieses Geräts vom alten geräte- auf den
+   neuen kontogebundenen Eintrag.
+
+**Was mit den alten Daten passiert:**
+
+- *Aufgaben und Verlauf* lagen schon immer unter `users/<uid>` – also bereits
+  deinem Konto zugeordnet. Nichts zu tun.
+- *Push-Abos* lagen unter `sub:<geräte-uuid>` ohne Nutzerbezug. Diese Einträge
+  werden vom Cron **weiter beliefert**, damit die Erinnerung nicht abreisst.
+  Sobald sich dasselbe Gerät angemeldet neu registriert (Schritt 4), löscht der
+  Worker den alten Eintrag selbst. Doppelte Meldungen kann es dadurch nicht
+  geben.
+- *Die Wunschuhrzeit* lag lokal auf dem Gerät und wandert beim ersten
+  Speichern ins Profil.
+
+## Manuelle Testcheckliste
+
+**Datenisolation**
+
+- [ ] Mit deinem Konto anmelden, Tasks anlegen und abhaken.
+- [ ] Zweites Google-Konto (anderer Browser oder privates Fenster): anmelden →
+      die Liste ist **leer**, nicht deine.
+- [ ] Im zweiten Konto Tasks anlegen → im ersten Konto neu laden: davon ist
+      **nichts** zu sehen.
+- [ ] Abmelden und wieder anmelden → die eigenen Tasks sind vollständig da.
+- [ ] Auf demselben Gerät Konto A abmelden, Konto B anmelden → Titel und Liste
+      wechseln, kein Rest von A bleibt stehen.
+
+**Name**
+
+- [ ] Erster Login mit einem neuen Konto → Onboarding-Dialog erscheint,
+      vorbefüllt mit dem Vornamen aus dem Google-Konto.
+- [ ] Namen überschreiben → Titel, Browser-Tab und Begrüßung ziehen mit.
+- [ ] Name auf s/ß/x/z enden lassen (z. B. „Lukas") → „Lukas’ Task Tracker".
+- [ ] In den Einstellungen umbenennen → wirkt sofort, auch nach Neuladen.
+- [ ] Namen leeren → Titel fällt auf „Task Tracker" zurück.
+
+**iPhone**
+
+- [ ] Adresse in Safari öffnen (nicht installiert) → Karte zeigt die
+      Schritt-für-Schritt-Anleitung, keinen Aktivieren-Knopf.
+- [ ] *Teilen → Zum Home-Bildschirm*, App **von dort** öffnen → Karte zeigt
+      jetzt „Benachrichtigungen aktivieren".
+- [ ] Antippen → iOS fragt nach Erlaubnis → erlauben.
+- [ ] Zahnrad → *Test-Benachrichtigung senden* → Meldung kommt an.
+- [ ] Auf die Meldung tippen → App öffnet sich bzw. kommt nach vorn und zeigt
+      die Liste.
+- [ ] Erlaubnis in *Einstellungen → Mitteilungen* entziehen → die App sagt
+      „vom Browser blockiert" und erklärt, wie man es zurücksetzt.
+
+**Push über mehrere Nutzer und Geräte**
+
+- [ ] Dasselbe Konto auf einem zweiten Gerät aktivieren → in den Einstellungen
+      steht „Aktiv auf 2 Geräten".
+- [ ] Test-Benachrichtigung → kommt auf dem Gerät an, an dem du sie auslöst.
+- [ ] Zweites Konto ebenfalls aktivieren, Uhrzeit beider Konten auf die
+      nächsten Minuten stellen → beide bekommen ihre Meldung, jeder mit
+      **seiner** Zahl offener To-dos.
+- [ ] `wrangler tail` mitlaufen lassen → pro Versand steht eine Zeile im Log.
+- [ ] Uhrzeit am Laptop ändern → am zweiten Gerät nach dem Neuladen ebenfalls
+      geändert (sie hängt am Konto, nicht am Gerät).
+
+**Bestandsschutz**
+
+- [ ] Nach dem Ausrollen: deine bisherigen Tasks, dein Verlauf und dein
+      Streak-Rekord sind unverändert da.
+- [ ] *Backup speichern* → Datei enthält alles; *Backup laden* stellt es wieder
+      her.
 
 ### Bedienung in der App (Zahnrad ⚙️ oben rechts)
 
@@ -173,15 +339,29 @@ Anmeldung in der installierten PWA im Einzelfall hakt (WebKit trennt
 Cookies/Speicher strenger), hilft es, sich einmal im normalen Safari mit
 derselben Adresse anzumelden.
 
-**Sicherheit.** Firestore-Regeln erlauben jedem Nutzer nur Zugriff auf sein
-eigenes Dokument (`request.auth.uid == userId`). Der öffentliche `apiKey` in der
-Web-Config ist kein Geheimnis; der Schutz kommt über diese Regeln.
+**Was wo liegt.** Zwei Dokumente pro Konto:
+
+| Dokument | Inhalt |
+|---|---|
+| `users/<uid>` | `tasks[]`, `journal[]`, `history{}`, `bestStreak` |
+| `profiles/<uid>` | `displayName`, `notifyHour`, `notifyMinute`, `tz`, `updatedAt` |
+
+Bewusst getrennt: Der Aufgaben-Sync schreibt `users/<uid>` mit `setDoc()`
+komplett neu und würde ein dort mitgeführtes Profil bei jeder Änderung
+überbügeln.
+
+**Sicherheit.** Die Regeln in [`firestore.rules`](firestore.rules) erlauben
+jedem Konto nur seine beiden eigenen Dokumente (`request.auth.uid == uid`),
+alles andere ist gesperrt. Geprüft wird bei Google, nicht im Browser. Der
+öffentliche `apiKey` in der Web-Config ist kein Geheimnis; der Schutz kommt
+über diese Regeln.
 
 **Einrichtung in der Firebase-Konsole (einmalig):** Projekt anlegen → Web-App
-hinzufügen und `firebaseConfig` in den `<script type="module">`-Block unten in
+hinzufügen und `firebaseConfig` in den Modul-Skript-Block unten in
 `index.html` eintragen → Authentication mit Google-Anbieter aktivieren →
-Firestore-Datenbank in einer EU-Region anlegen → unter Authentication →
-Settings → Authorized domains die GitHub-Pages-Adresse
+Firestore-Datenbank in einer EU-Region anlegen → **Regeln aus
+`firestore.rules` veröffentlichen** → unter Authentication → Settings →
+Authorized domains die GitHub-Pages-Adresse
 (`zyklustracker-a11y.github.io`) hinzufügen.
 
 Ältere Stände werden beim Laden automatisch migriert: Aus dem früheren Typ
@@ -193,10 +373,33 @@ wandert in den Verlauf. Das gilt auch für alte Backup-Dateien, die du über
 
 | Was | Wo |
 |---|---|
-| Titel in der App | `<h1>` in `index.html` |
-| Name unterm iPhone-Symbol | `apple-mobile-web-app-title` und `short_name` im Manifest |
-| Farben | `tailwind.config` in `index.html`, Abschnitt `colors` |
+| Titel in der App | kommt aus dem Profil – in den Einstellungen änderbar |
+| Genitiv-Regel („Lukas’" vs. „Lea’s") | `possessive()` im Skript, Abschnitt 5 |
+| Titel ohne Namen | `trackerTitle()` im Skript, Abschnitt 5 |
+| Name unterm iPhone-Symbol | `apple-mobile-web-app-title` und `short_name` im Manifest (bewusst neutral) |
+| iPhone-Anleitung | `IOS_STEPS` im Skript, Abschnitt 13 |
+| Farben | `tools/tailwind.config.js`, Abschnitt `colors` |
 | Feier-Sprüche | `CELEBRATIONS` im Skript, Abschnitt 7 |
+
+Willst du statt der Rechtschreib-Regel überall die Apostroph-Form („Lea’s Task
+Tracker", „Lukas’ Task Tracker"), reicht in `possessive()` eine Zeile: aus
+`clean + 's'` wird `clean + '’s'`.
+
+### Namen, die absichtlich stehen bleiben
+
+Ein paar Bezeichner tragen noch den ursprünglichen Projektnamen. Sie sind
+Infrastruktur, nicht Beschriftung – ein Umbenennen hätte Folgen und keinen
+Nutzen:
+
+| Wo | Warum es bleibt |
+|---|---|
+| `lucaTasks`, `lucaTasks.v3`, `lucaHabitTracker` in `index.html`/`sw.js` | Schlüssel von IndexedDB und localStorage. Umbenennen = alle Geräte finden ihre lokalen Daten nicht mehr. |
+| `luca-tasklist-push` in `wrangler.toml` | Name des Workers und damit Teil seiner Adresse. Umbenennen = `WORKER_URL` wird ungültig. |
+| `luca-tasklist` als `FIREBASE_PROJECT_ID` / `projectId` | Kennung des Firebase-Projekts, von Google vergeben. |
+| `VAPID_SUBJECT` | Kontaktadresse des Betreibers, die Push-Dienste laut RFC 8292 verlangen. Steht als Konfigurationsvariable, nicht im Code. |
+
+Nirgends davon steht ein Name in der Oberfläche – dort kommt er
+ausschliesslich aus dem Profil des angemeldeten Kontos.
 
 Nach jeder Änderung in `sw.js` die `CACHE_VERSION` hochzählen, sonst hält die
 installierte App die alte Fassung fest.

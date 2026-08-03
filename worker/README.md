@@ -5,11 +5,37 @@ der morgens den leeren Push-Anstoss verschickt – die Aufgabe, die GitHub Pages
 selbst nicht kann.
 
 ```
-worker/worker.js       Der Worker: HTTP-Endpunkte + Cron-Versand
+worker/worker.js        Der Worker: HTTP-Endpunkte + Cron-Versand
 worker/wrangler.toml    Konfiguration (Name, KV, Cron, VAPID-Public-Key)
 ```
 
 Alles läuft im **kostenlosen** Cloudflare-Tarif (Workers + KV + Cron Triggers).
+
+## Wie die Zuordnung funktioniert
+
+Der Worker bedient **alle** Nutzer der App. Damit niemand an die Abos eines
+anderen kommt, verlangt jeder Endpunkt ein **Firebase-ID-Token** im
+`Authorization: Bearer …`-Header. Der Worker prüft dessen Signatur selbst gegen
+Googles öffentliche Schlüssel und nimmt die Benutzerkennung **aus dem Token** –
+nie aus dem Anfragekörper. Ein manipuliertes Frontend nützt also nichts.
+
+| Endpunkt (POST) | Wozu |
+|---|---|
+| `/subscribe` | dieses Gerät anmelden (Abo + Uhrzeit + Zeitzone) |
+| `/settings` | nur Uhrzeit, Zeitzone, an/aus ändern |
+| `/unsubscribe` | dieses Gerät abmelden (ohne `endpoint`: alle Geräte) |
+| `/test` | sofort einen Test-Push schicken |
+| `/devices` | wie viele Geräte hängen am Konto |
+
+Im KV-Speicher (`SUBS`):
+
+```
+sub:<uid>:<endpoint-hash>   ein Gerät: endpoint, p256dh, auth, userAgent,
+                            createdAt, lastSeen
+ep:<endpoint-hash>          "<uid>" – macht endpoint eindeutig
+user:<uid>                  hour, minute, tz, enabled, lastSent
+jwks:securetoken            Googles Signaturschlüssel (Zwischenspeicher)
+```
 
 ---
 
@@ -75,6 +101,20 @@ wrangler secret put VAPID_PRIVATE_KEY
 Der Befehl fragt nach dem Wert – dort den privaten Schlüssel einfügen und
 Enter drücken. Er landet verschlüsselt bei Cloudflare, nicht im Code.
 
+### 5b. Variablen prüfen
+
+In `wrangler.toml` unter `[vars]` müssen stehen:
+
+| Variable | Wert | Wozu |
+|---|---|---|
+| `VAPID_PUBLIC_KEY` | derselbe wie in `index.html` | Push-Anmeldung |
+| `VAPID_SUBJECT` | `mailto:deine@adresse` | Absender-Kennung (RFC 8292) |
+| `FIREBASE_PROJECT_ID` | `projectId` aus `firebaseConfig` | daran erkennt der Worker, dass ein Token zu dieser App gehört |
+
+**Wichtig:** Stimmt `FIREBASE_PROJECT_ID` nicht exakt mit der `projectId` aus
+`index.html` überein, lehnt der Worker jede Anmeldung mit
+„Token: falsches Projekt" ab.
+
 ### 6. Deployen
 
 ```bash
@@ -107,14 +147,28 @@ Fertig. Ab jetzt meldet sich die App beim Aktivieren automatisch beim Worker an
 
 ## Prüfen, ob es läuft
 
-- Adresse im Browser öffnen → es sollte „Luca Tasklist Push Worker läuft."
+- Adresse im Browser öffnen → es sollte „Task Tracker Push Worker läuft."
   erscheinen.
 - Live-Protokoll während eines Tests ansehen:
   ```bash
   wrangler tail
   ```
+  Der Worker protokolliert jeden Versand mit Zeile, etwa:
+  ```
+  [subscribe] AbC123… geraet=k7Qd2s1p zeit=9:0 tz=Europe/Zurich
+  [push] AbC123… sub:AbC123…:k7Qd2s1p: status=201 ok
+  [cron] fertig: 3 Nutzer geprueft, 1 faellig, 2 Push gesendet, 0 Fehler, 412ms
+  ```
 - Cron-Läufe und Fehler stehen im Cloudflare-Dashboard unter
   **Workers & Pages → luca-tasklist-push → Logs** bzw. **Triggers**.
+
+## Umstieg vom Einzelnutzer-Betrieb
+
+Der alte Bestand (`sub:<geräte-uuid>` ohne Benutzerkennung) wird vom Cron
+**weiter beliefert**. Es geht also keine Erinnerung verloren, während die neue
+Fassung ausgerollt wird. Sobald sich dasselbe Gerät angemeldet neu registriert,
+löscht der Worker den alten Eintrag selbst – doppelte Meldungen kann es dadurch
+nicht geben. Aufräumen von Hand ist nicht nötig.
 
 ## Später etwas ändern
 
