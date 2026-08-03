@@ -2032,10 +2032,14 @@
 
     function openOnboarding(suggestion) {
       if (onboardingOpen) return;
+      // Angemeldet wird man IN den Einstellungen – der Onboarding-Dialog käme
+      // also darüber zu liegen und würde jeden Klick darin schlucken. Deshalb
+      // die Einstellungen vorher schliessen: es ist immer nur ein Dialog offen.
+      if (settingsOpen) closeSettings();
       onboardingOpen = true;
       el.onboardingName.value = normalizeText(suggestion).slice(0, 60);
       updateOnboardingPreview();
-      el.onboardingModal.classList.remove('hidden');
+      el.onboardingModal.classList.remove('hidden', 'pointer-events-none');
       requestAnimationFrame(function () {
         el.onboardingBackdrop.classList.remove('opacity-0');
         el.onboardingPanel.classList.remove('opacity-0', 'translate-y-6');
@@ -2049,6 +2053,10 @@
 
     function closeOnboarding() {
       onboardingOpen = false;
+      // Sofort für Klicks durchlässig machen. Der Dialog blendet 300 ms lang
+      // aus und läge sonst unsichtbar über der App – wer in dieser Zeit tippt,
+      // träfe ins Leere.
+      el.onboardingModal.classList.add('pointer-events-none');
       el.onboardingBackdrop.classList.add('opacity-0');
       el.onboardingPanel.classList.add('opacity-0', 'translate-y-6');
       setTimeout(function () { if (!onboardingOpen) el.onboardingModal.classList.add('hidden'); }, 300);
@@ -2081,14 +2089,44 @@
     });
 
     /* ---- Name in den Einstellungen ändern ---- */
-    function saveProfileFromSettings() {
-      const name = saveDisplayName(el.profileName.value);
-      syncProfileInputs();
-      showToast(name ? 'Name gespeichert' : 'Name entfernt');
+
+    // Verhindert, dass derselbe Name zweimal gespeichert wird: das blur() unten
+    // löst seinerseits ein change-Ereignis aus, das hier wieder hereinkommt.
+    let profileSaving = false;
+
+    /**
+     * Übernimmt, was im Namensfeld steht. `explicit` heisst: der Nutzer hat den
+     * Knopf gedrückt und will eine Rückmeldung, auch wenn sich nichts geändert
+     * hat. Beim blossen Verlassen des Feldes wird nur bei echter Änderung
+     * gemeldet.
+     */
+    function commitProfileName(explicit) {
+      if (profileSaving) return;
+      profileSaving = true;
+      try {
+        if (document.activeElement === el.profileName) el.profileName.blur();
+        const typed = normalizeText(el.profileName.value).slice(0, 60);
+        const changed = typed !== displayName();
+        if (changed) saveDisplayName(typed);
+        syncProfileInputs();
+        if (explicit || changed) showToast(typed ? 'Name gespeichert' : 'Name entfernt');
+      } finally {
+        profileSaving = false;
+      }
     }
-    el.profileSave.addEventListener('click', saveProfileFromSettings);
+
+    // Auf dem iPhone klappt beim Antippen zuerst die Tastatur zu. Das Fenster
+    // rutscht dabei nach unten – und der Finger landet dort, wo der Knopf
+    // gerade noch war. preventDefault auf pointerdown hält den Fokus im Feld,
+    // bis der Klick wirklich angekommen ist.
+    el.profileSave.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+    el.profileSave.addEventListener('click', function () { commitProfileName(true); });
+
+    // Doppelter Boden: Wer das Feld einfach verlässt, verliert seine Eingabe
+    // trotzdem nicht.
+    el.profileName.addEventListener('change', function () { commitProfileName(false); });
     el.profileName.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); el.profileName.blur(); saveProfileFromSettings(); }
+      if (e.key === 'Enter') { e.preventDefault(); commitProfileName(true); }
     });
 
     /* ============================================================
