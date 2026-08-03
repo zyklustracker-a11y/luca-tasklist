@@ -1,6 +1,9 @@
-# Cloudflare-Worker für den täglichen Morgen-Push.
+# Cloudflare-Worker für den täglichen Morgen-Push (alle Nutzer, alle Geräte).
 # Deploy-Anleitung Schritt für Schritt: siehe worker/README.md
-
+#
+# Der Name des Workers ist reine Infrastruktur (er steckt in der Adresse
+# https://<name>.<konto>.workers.dev) und wird deshalb nicht umbenannt –
+# eine Änderung würde die WORKER_URL in index.html ungültig machen.
 name = "luca-tasklist-push"
 main = "worker.js"
 compatibility_date = "2024-11-01"
@@ -15,6 +18,11 @@ VAPID_PUBLIC_KEY = "BLoqjHdIwfSrLH4JxSWWjxvudOsqhGMNA8RsKFUysL6FlS3ZWjDWoSyw7hRT
 # Absender-Kennung für den VAPID-Nachweis (RFC 8292): mailto: oder https:.
 # Push-Dienste verlangen sie, um bei Problemen jemanden erreichen zu können.
 VAPID_SUBJECT = "mailto:luca.toriellolt@gmail.com"
+
+# Firebase-Projekt, dessen Anmeldungen der Worker akzeptiert. Muss exakt der
+# projectId aus firebaseConfig in index.html entsprechen – daran erkennt der
+# Worker, dass ein ID-Token wirklich zu DIESER App gehört.
+FIREBASE_PROJECT_ID = "luca-tasklist"
 # Optional strenger: nur Anfragen von deiner GitHub-Pages-Adresse zulassen.
 # Ohne diese Zeile sind Anfragen von überall erlaubt (für eine private App ok).
 # ALLOWED_ORIGIN = "https://DEINNAME.github.io"
