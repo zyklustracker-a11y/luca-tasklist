@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Luca's Task Tracker</title>
+  <!-- Der Titel wird nach dem Laden durch den persönlichen ersetzt
+       ("<Name>s Task Tracker"). Das Manifest bleibt bewusst neutral: es wird
+       beim Installieren einmal gelesen und ist danach geräteweit fest. -->
+  <title>Task Tracker</title>
   <meta name="description" content="Tägliche Tasks abhaken, Streak halten, nichts geht verloren." />
 
   <!-- PWA / Icons -->
@@ -296,13 +299,35 @@
         <span id="weekday-badge">Heute</span>
       </div>
       <h1 class="flex flex-wrap items-center justify-center gap-x-2 text-4xl font-bold tracking-tight sm:gap-x-3 sm:text-5xl">
-        <span class="bg-gradient-to-r from-white via-accent-glow to-accent bg-clip-text text-transparent drop-shadow-[0_0_24px_rgba(74,222,128,0.25)]">
-          Luca's Task Tracker
+        <span id="app-title" class="bg-gradient-to-r from-white via-accent-glow to-accent bg-clip-text text-transparent drop-shadow-[0_0_24px_rgba(74,222,128,0.25)]">
+          Task Tracker
         </span>
         <span class="leading-none" role="img" aria-label="Flamme">&#128293;</span>
       </h1>
       <p id="greeting" class="mt-3 text-sm text-slate-400 sm:text-base"></p>
     </header>
+
+    <!-- Benachrichtigungen: sichtbarer Einstieg statt einer automatischen
+         Abfrage beim Seitenaufruf. Wird nur eingeblendet, wenn es hier auch
+         wirklich etwas zu tun gibt. -->
+    <section id="push-card" class="mb-6 hidden rounded-2xl border border-accent/20 bg-surface-800/80 p-4 shadow-card backdrop-blur-sm">
+      <div class="flex items-start gap-3">
+        <span class="mt-0.5 shrink-0 text-xl" role="img" aria-hidden="true">&#128276;</span>
+        <div class="min-w-0 flex-1">
+          <p id="push-card-title" class="text-sm font-semibold text-slate-200">Tägliche Erinnerung</p>
+          <p id="push-card-text" class="mt-1 text-xs leading-relaxed text-slate-400"></p>
+          <ol id="push-card-steps" class="mt-3 hidden list-none space-y-2 rounded-xl border border-white/5 bg-surface-900/50 p-3 text-xs leading-relaxed text-slate-300"></ol>
+          <button id="push-card-btn" type="button"
+            class="mt-3 hidden w-full rounded-xl bg-gradient-to-r from-accent-dim to-accent py-3 text-sm font-semibold text-surface-900 transition hover:from-accent hover:to-accent-glow active:scale-[0.99]">
+            Benachrichtigungen aktivieren
+          </button>
+          <button id="push-card-dismiss" type="button"
+            class="mt-2 w-full rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:text-slate-300">
+            Später
+          </button>
+        </div>
+      </div>
+    </section>
 
     <!-- Stats -->
     <section class="mb-6 grid grid-cols-2 gap-3 sm:gap-4">
@@ -403,12 +428,30 @@
         </div>
 
         <div class="space-y-4 overflow-y-auto px-5 py-5">
+          <!-- Profil: Anzeigename -->
+          <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
+            <p class="text-sm font-semibold text-slate-200">Dein Name</p>
+            <p id="profile-hint" class="mt-1 text-xs leading-relaxed text-slate-400">
+              Steht im Titel der App und in der Begrüßung.
+            </p>
+            <div class="mt-3 flex gap-2">
+              <label for="profile-name" class="sr-only">Dein Name</label>
+              <input id="profile-name" type="text" maxlength="60" placeholder="z. B. Lea" enterkeyhint="done"
+                class="min-w-0 flex-1 rounded-xl border border-white/10 bg-surface-700 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+              <button id="profile-save" type="button"
+                class="shrink-0 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">
+                Speichern
+              </button>
+            </div>
+          </section>
+
           <!-- Benachrichtigungen -->
           <section class="rounded-2xl border border-white/5 bg-surface-900/40 p-4">
             <div class="flex items-center justify-between gap-4">
               <div class="min-w-0">
                 <p class="text-sm font-semibold text-slate-200">Morgens erinnern</p>
                 <p id="reminder-status" class="mt-1 text-xs leading-relaxed text-slate-400">Status wird geprüft …</p>
+                <p id="reminder-devices" class="mt-1 text-xs text-slate-500"></p>
               </div>
               <button id="reminder-toggle" type="button" role="switch" aria-checked="false" aria-label="Erinnerung ein- oder ausschalten"
                 class="relative hidden h-7 w-12 shrink-0 rounded-full border border-white/10 bg-surface-700 transition-colors duration-200">
@@ -468,6 +511,38 @@
             <p id="storage-note" class="mt-3 text-xs leading-relaxed text-slate-600"></p>
           </section>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Onboarding: Name beim ersten Login bestätigen. Wird nur gezeigt, wenn
+       im Profil des Kontos noch kein Name steht. Das Feld ist mit dem
+       Vornamen aus dem Google-Konto vorbefüllt – nie leer. -->
+  <div id="onboarding-modal" class="fixed inset-0 z-[95] hidden">
+    <div id="onboarding-backdrop" class="absolute inset-0 bg-black/70 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
+    <div class="absolute inset-0 flex items-end justify-center px-4 pt-10 sm:items-center sm:p-6"
+         style="padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))">
+      <div id="onboarding-panel"
+        class="relative w-full max-w-sm translate-y-6 rounded-3xl border border-accent/20 bg-surface-800 p-6 opacity-0 shadow-card transition-all duration-300"
+        role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <h2 id="onboarding-title" class="text-xl font-semibold text-white">Willkommen!</h2>
+        <p class="mt-2 text-sm leading-relaxed text-slate-400">
+          Wie sollen wir dich nennen? Der Name steht danach im Titel deiner Liste –
+          ändern kannst du ihn jederzeit in den Einstellungen.
+        </p>
+        <label for="onboarding-name" class="sr-only">Dein Name</label>
+        <input id="onboarding-name" type="text" maxlength="60" autocomplete="given-name" enterkeyhint="done"
+          class="mt-4 w-full rounded-xl border border-white/10 bg-surface-700 px-4 py-3 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+          placeholder="Dein Vorname" />
+        <p id="onboarding-preview" class="mt-2 min-h-[1.25rem] text-xs text-slate-500"></p>
+        <button id="onboarding-save" type="button"
+          class="mt-4 w-full rounded-xl bg-gradient-to-r from-accent-dim to-accent py-3.5 font-semibold text-surface-900 transition hover:from-accent hover:to-accent-glow active:scale-[0.98]">
+          Passt so
+        </button>
+        <button id="onboarding-skip" type="button"
+          class="mt-2 w-full rounded-xl px-3 py-2 text-xs font-medium text-slate-500 transition hover:text-slate-300">
+          Ohne Namen fortfahren
+        </button>
       </div>
     </div>
   </div>
@@ -600,13 +675,32 @@
         journal: [],   // jede erledigte Task, nach Datum – wird nie gelöscht
         history: {},   // Altbestand aus Version 3, wird nur noch angezeigt
         settings: defaultSettings(),
+        profile: defaultProfile(),
       };
     }
 
-    // Einstellungen der Erinnerung. subscriberId identifiziert dieses Gerät
-    // beim Worker (ein Eintrag pro Gerät im KV-Speicher).
+    // Profil des angemeldeten Kontos. Liegt zusätzlich lokal, damit der Titel
+    // schon beim ersten Bild steht und offline nicht auf "Task Tracker"
+    // zurückfällt. Führend ist immer das Dokument profiles/<uid> in Firestore.
+    function defaultProfile() {
+      return { displayName: '', uid: null };
+    }
+
+    function sanitizeProfile(raw) {
+      const p = defaultProfile();
+      if (raw && typeof raw === 'object') {
+        if (typeof raw.displayName === 'string') p.displayName = raw.displayName.trim().slice(0, 60);
+        if (typeof raw.uid === 'string' && raw.uid) p.uid = raw.uid;
+      }
+      return p;
+    }
+
+    // Wunschzeit der Erinnerung. Sie gehört zum Konto (Profil in der Cloud)
+    // und liegt hier nur als schnell verfügbare Kopie. Die frühere
+    // subscriberId ist entfallen: Geräte erkennt der Worker jetzt am
+    // Push-Endpoint, die Zuordnung läuft über die Benutzerkennung.
     function defaultSettings() {
-      return { notifyHour: 9, notifyMinute: 0, subscriberId: null };
+      return { notifyHour: 9, notifyMinute: 0 };
     }
 
     function sanitizeSettings(raw) {
@@ -614,7 +708,6 @@
       if (raw && typeof raw === 'object') {
         if (Number.isInteger(raw.notifyHour) && raw.notifyHour >= 0 && raw.notifyHour <= 23) s.notifyHour = raw.notifyHour;
         if (Number.isInteger(raw.notifyMinute) && raw.notifyMinute >= 0 && raw.notifyMinute <= 59) s.notifyMinute = raw.notifyMinute;
-        if (typeof raw.subscriberId === 'string' && raw.subscriberId) s.subscriberId = raw.subscriberId;
       }
       return s;
     }
@@ -670,6 +763,7 @@
       base.history = (raw.history && typeof raw.history === 'object') ? raw.history : {};
       base.bestStreak = Number(raw.bestStreak) || 0;   // alter Rekord bleibt Untergrenze
       base.settings = sanitizeSettings(raw.settings);
+      base.profile = sanitizeProfile(raw.profile);
       return base;
     }
 
@@ -728,6 +822,7 @@
        4. DOM
        ============================================================ */
     const el = {
+      appTitle: document.getElementById('app-title'),
       weekdayBadge: document.getElementById('weekday-badge'),
       greeting: document.getElementById('greeting'),
       progressText: document.getElementById('progress-text'),
@@ -755,12 +850,29 @@
       accountBadge: document.getElementById('account-badge'),
       accountSignin: document.getElementById('account-signin'),
       accountSignout: document.getElementById('account-signout'),
+      pushCard: document.getElementById('push-card'),
+      pushCardTitle: document.getElementById('push-card-title'),
+      pushCardText: document.getElementById('push-card-text'),
+      pushCardSteps: document.getElementById('push-card-steps'),
+      pushCardBtn: document.getElementById('push-card-btn'),
+      pushCardDismiss: document.getElementById('push-card-dismiss'),
       reminderStatus: document.getElementById('reminder-status'),
+      reminderDevices: document.getElementById('reminder-devices'),
       reminderToggle: document.getElementById('reminder-toggle'),
       reminderKnob: document.getElementById('reminder-knob'),
       reminderTimeRow: document.getElementById('reminder-time-row'),
       notifyTime: document.getElementById('notify-time'),
       reminderTest: document.getElementById('reminder-test'),
+      profileName: document.getElementById('profile-name'),
+      profileSave: document.getElementById('profile-save'),
+      profileHint: document.getElementById('profile-hint'),
+      onboardingModal: document.getElementById('onboarding-modal'),
+      onboardingBackdrop: document.getElementById('onboarding-backdrop'),
+      onboardingPanel: document.getElementById('onboarding-panel'),
+      onboardingName: document.getElementById('onboarding-name'),
+      onboardingPreview: document.getElementById('onboarding-preview'),
+      onboardingSave: document.getElementById('onboarding-save'),
+      onboardingSkip: document.getElementById('onboarding-skip'),
       settingsBtn: document.getElementById('settings-btn'),
       settingsModal: document.getElementById('settings-modal'),
       settingsPanel: document.getElementById('settings-panel'),
@@ -847,11 +959,47 @@
       return parseKey(key).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'long' });
     }
 
+    /* ---- Name & Titel ------------------------------------------------
+       Der Anzeigename kommt aus dem Profil des angemeldeten Kontos. Ist
+       keiner gesetzt (nicht angemeldet, Onboarding übersprungen), heisst die
+       App schlicht "Task Tracker" – nie ein leerer oder halber Titel. */
+
+    function displayName() {
+      return (state.profile && state.profile.displayName) || '';
+    }
+
+    /**
+     * Genitiv eines Namens nach deutscher Rechtschreibung: Namen, die auf
+     * s, ß, x oder z enden, bekommen nur ein Apostroph ("Lukas’"), alle
+     * anderen ein angehängtes s ohne Apostroph ("Leas").
+     * Willst du stattdessen überall die Apostroph-Form ("Lea’s"), reicht es,
+     * das else zu   name + '’s'   zu ändern.
+     */
+    function possessive(name) {
+      const clean = normalizeText(name);
+      if (!clean) return '';
+      return /[sßxzSXZ]$/.test(clean) ? clean + '’' : clean + 's';
+    }
+
+    function trackerTitle() {
+      const owner = possessive(displayName());
+      return owner ? owner + ' Task Tracker' : 'Task Tracker';
+    }
+
+    /** Schreibt den Namen überall hin, wo er auftaucht. */
+    function applyIdentity() {
+      const title = trackerTitle();
+      document.title = title;
+      if (el.appTitle) el.appTitle.textContent = title;
+      if (el.greeting) el.greeting.textContent = greetingText();
+    }
+
     function greetingText() {
       const h = new Date().getHours();
       const part = h < 5 ? 'Gute Nacht' : h < 11 ? 'Guten Morgen' : h < 18 ? 'Guten Tag' : 'Guten Abend';
       const date = new Date().toLocaleDateString('de-CH', { day: 'numeric', month: 'long', year: 'numeric' });
-      return part + ' – heute ist der ' + date;
+      const name = displayName();
+      return part + (name ? ', ' + name : '') + ' – heute ist der ' + date;
     }
 
     /* ============================================================
@@ -1073,6 +1221,7 @@
     }
 
     function render() {
+      applyIdentity();
       renderStats();
       renderList();
       renderHistory();
@@ -1392,16 +1541,46 @@
              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
 
-    /** Eindeutige Geräte-Kennung – ein Eintrag pro Gerät im KV-Speicher. */
-    function ensureSubscriberId() {
-      if (!state.settings.subscriberId) {
-        state.settings.subscriberId = (crypto && crypto.randomUUID)
-          ? crypto.randomUUID()
-          : 'dev-' + Date.now().toString(36) + Math.random().toString(16).slice(2);
-        save();
-      }
-      return state.settings.subscriberId;
+    /**
+     * Web-Push gibt es in Safari erst ab iOS 16.4. Lässt sich die Version
+     * nicht ablesen (iPadOS meldet sich als Mac), gehen wir vom Guten aus –
+     * lieber einmal zu viel anbieten als jemanden grundlos aussperren.
+     */
+    function iosPushCapable() {
+      const m = /(?:iPhone|iPad|iPod)[^)]*?OS (\d+)[_.](\d+)/.exec(navigator.userAgent);
+      if (!m) return true;
+      const major = Number(m[1]), minor = Number(m[2]);
+      return major > 16 || (major === 16 && minor >= 4);
     }
+
+    function pushSupported() {
+      return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    }
+
+    /** Wie man eine einmal erteilte Sperre wieder aufhebt – je nach Gerät. */
+    function unblockHint() {
+      if (isApple()) {
+        return 'Freigeben in: Einstellungen → Mitteilungen → „Tasks“ → „Mitteilungen erlauben“ einschalten.';
+      }
+      if (/Android/i.test(navigator.userAgent)) {
+        return 'Freigeben in: Einstellungen → Apps → „Tasks“ → Benachrichtigungen erlauben.';
+      }
+      return 'Freigeben über das Schloss-Symbol links neben der Adresse → Website-Einstellungen → Benachrichtigungen auf „Zulassen“. Danach die Seite neu laden.';
+    }
+
+    // Anleitung fürs iPhone. Bewusst wörtlich und in der Reihenfolge, in der
+    // man tippt – das muss ohne Rückfragen funktionieren.
+    const IOS_STEPS = [
+      'Tippe unten in der Safari-Leiste auf das <strong>Teilen-Symbol</strong> (Quadrat mit Pfeil nach oben).',
+      'Wisch in der Liste nach unten und wähle <strong>„Zum Home-Bildschirm“</strong>.',
+      'Tippe oben rechts auf <strong>„Hinzufügen“</strong>.',
+      'Schließ Safari und öffne die App über das <strong>neue Symbol auf dem Home-Bildschirm</strong>.',
+      'Dort erscheint dann der Knopf <strong>„Benachrichtigungen aktivieren“</strong>.',
+    ].map(function (text, i) {
+      return '<li class="flex gap-2">' +
+        '<span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/20 text-[10px] font-bold text-accent-glow">' + (i + 1) + '</span>' +
+        '<span>' + text + '</span></li>';
+    }).join('');
 
     function currentTimeZone() {
       try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
@@ -1415,36 +1594,69 @@
     }
 
     let reminderBusy = false;
+    let signedIn = false;
 
-    /** POST an den Worker, immer als abgefangenes { ok, status, data }. */
+    /**
+     * POST an den Worker, immer als abgefangenes { ok, status, data, reason }.
+     * Jede Anfrage trägt das Firebase-ID-Token – der Worker leitet die
+     * Benutzerkennung daraus ab, wir schicken sie nie selbst mit.
+     */
     function workerPost(path, body) {
-      return fetch(WORKER_URL + path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }).then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (data) {
-          return { ok: res.ok, status: res.status, data: data };
+      if (!WORKER_URL) return Promise.resolve({ ok: false, status: 0, reason: 'no-url', data: {} });
+      const sync = window.__taskSync;
+      if (!sync || !sync.getIdToken) {
+        return Promise.resolve({ ok: false, status: 0, reason: 'no-auth', data: {} });
+      }
+      return sync.getIdToken().then(function (token) {
+        if (!token) return { ok: false, status: 401, reason: 'signed-out', data: {} };
+        return fetch(WORKER_URL + path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify(body || {}),
+        }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            return { ok: res.ok, status: res.status, data: data, reason: null };
+          });
+        });
+      }).catch(function () {
+        return { ok: false, status: 0, reason: 'network', data: {} };
+      });
+    }
+
+    /** Das Push-Abo dieses Geräts, oder null. */
+    function currentSubscription() {
+      if (!pushSupported()) return Promise.resolve(null);
+      return navigator.serviceWorker.ready
+        .then(function (reg) { return reg.pushManager.getSubscription(); })
+        .catch(function () { return null; });
+    }
+
+    /** Dieses Gerät (samt Uhrzeit/Zeitzone) beim Konto anmelden. */
+    function registerDevice() {
+      return currentSubscription().then(function (sub) {
+        if (!sub) return { ok: false, status: 0, reason: 'no-sub', data: {} };
+        return workerPost('/subscribe', {
+          subscription: sub.toJSON(),
+          userAgent: navigator.userAgent,
+          hour: state.settings.notifyHour,
+          minute: state.settings.notifyMinute,
+          tz: currentTimeZone(),
+          enabled: true,
         });
       });
     }
 
-    /** Aktuelles Abo + Einstellungen zum Worker schicken (Uhrzeit/Zeitzone). */
-    function pushSettingsToWorker() {
-      if (!WORKER_URL) return Promise.resolve({ ok: false, skipped: 'no-url' });
-      return navigator.serviceWorker.ready
-        .then(function (reg) { return reg.pushManager.getSubscription(); })
-        .then(function (sub) {
-          if (!sub) return { ok: false, skipped: 'no-sub' };
-          return workerPost('/save', {
-            id: ensureSubscriberId(),
-            subscription: sub.toJSON(),
-            hour: state.settings.notifyHour,
-            minute: state.settings.notifyMinute,
-            tz: currentTimeZone(),
-            enabled: true,
-          });
-        });
+    /** Zeigt an, auf wie vielen Geräten die Erinnerung aktiv ist. */
+    function refreshDeviceCount() {
+      if (!el.reminderDevices) return;
+      workerPost('/devices', {}).then(function (result) {
+        const n = result && result.ok ? Number(result.data && result.data.devices) : 0;
+        el.reminderDevices.textContent = n > 1
+          ? 'Aktiv auf ' + n + ' Geräten.'
+          : (n === 1 ? 'Aktiv auf diesem Gerät.' : '');
+      }).catch(function () {
+        el.reminderDevices.textContent = '';
+      });
     }
 
     /** Schaltet die optische Stellung des Umschalters. */
@@ -1470,119 +1682,196 @@
       el.notifyTime.value = h + ':' + m;
     }
 
-    function reminderUnavailable() {
-      el.reminderToggle.classList.add('hidden');
-      showTimeRow(false);
-      el.reminderTest.classList.add('hidden');
+    /**
+     * Der eine Ort, an dem der Zustand bestimmt wird. Karte und Einstellungen
+     * zeichnen beide daraus ihr Bild, damit sie sich nie widersprechen.
+     *
+     *   ios-install  iPhone/iPad, App liegt noch nicht auf dem Home-Bildschirm
+     *   unsupported  Browser kann kein Web-Push
+     *   signedout    nicht angemeldet – ohne Konto kein Versand
+     *   blocked      vom Browser gesperrt
+     *   off          möglich, aber noch nicht eingeschaltet
+     *   on           läuft
+     */
+    function reminderState() {
       if (isApple() && !isStandalone()) {
-        el.reminderStatus.textContent =
-          'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen → Zum Home-Bildschirm. ' +
-          'Danach die App von dort öffnen.';
-      } else {
-        el.reminderStatus.textContent = 'Dieser Browser kann keine Benachrichtigungen empfangen.';
+        return Promise.resolve({ kind: 'ios-install', tooOld: !iosPushCapable() });
       }
-    }
-
-    function paintReminder() {
-      syncTimeInput();
-      if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window) ||
-          (isApple() && !isStandalone())) {
-        return reminderUnavailable();
-      }
-      if (Notification.permission === 'denied') {
-        el.reminderToggle.classList.add('hidden');
-        showTimeRow(false);
-        el.reminderTest.classList.add('hidden');
-        el.reminderStatus.textContent =
-          'Benachrichtigungen sind für diese App gesperrt. Das lässt sich nur in den ' +
-          'iOS-Einstellungen unter Mitteilungen wieder freigeben.';
-        return;
-      }
-
-      // Uhrzeit-Wahl steht immer offen; der Test-Button erst, wenn ein Abo besteht.
-      showTimeRow(true);
-      navigator.serviceWorker.ready
-        .then(function (reg) { return reg.pushManager.getSubscription(); })
-        .then(function (existing) {
-          paintToggle(!!existing);
-          el.reminderTest.classList.toggle('hidden', !existing);
-          el.reminderStatus.textContent = existing
-            ? reminderActiveText()
-            : 'Aus. Antippen für eine tägliche Erinnerung an deine offenen To-dos.';
-        })
-        .catch(function () {
-          el.reminderStatus.textContent = 'Der Status liess sich gerade nicht ermitteln.';
-        });
-    }
-
-    function enableReminder() {
-      // Die Abfrage muss aus einem Tippen heraus kommen, sonst lehnt iOS ab.
-      return Notification.requestPermission().then(function (permission) {
-        if (permission !== 'granted') {
-          el.reminderStatus.textContent = 'Ohne Erlaubnis keine Erinnerung. Du kannst es jederzeit erneut versuchen.';
-          return;
-        }
-        return navigator.serviceWorker.ready.then(function (reg) {
-          return reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: vapidKeyBytes(VAPID_PUBLIC_KEY),
-          });
-        }).then(function () {
-          return pushSettingsToWorker();
-        }).then(function (result) {
-          paintToggle(true);
-          el.reminderTest.classList.remove('hidden');
-          if (!WORKER_URL) {
-            el.reminderStatus.textContent =
-              'Auf diesem Gerät aktiviert. Es fehlt noch die WORKER_URL im Code – ohne sie kann der Server nichts senden (siehe worker/README.md).';
-            showToast('Aktiviert – Worker-URL fehlt noch');
-            return;
-          }
-          if (result && result.ok === false) {
-            el.reminderStatus.textContent =
-              'Aktiviert, aber der Server war nicht erreichbar. Uhrzeit später erneut speichern.';
-            showToast('Server nicht erreichbar');
-            return;
-          }
-          el.reminderStatus.textContent = reminderActiveText();
-          showToast('Erinnerung aktiviert');
-        });
-      }).catch(function () {
-        el.reminderStatus.textContent =
-          'Die Anmeldung hat nicht geklappt. Prüf, ob die App wirklich vom Home-Bildschirm aus geöffnet ist.';
+      if (!pushSupported()) return Promise.resolve({ kind: 'unsupported' });
+      if (!signedIn) return Promise.resolve({ kind: 'signedout' });
+      if (Notification.permission === 'denied') return Promise.resolve({ kind: 'blocked' });
+      return currentSubscription().then(function (sub) {
+        return { kind: sub ? 'on' : 'off' };
       });
     }
 
-    function disableReminder() {
-      const id = state.settings.subscriberId;
-      return navigator.serviceWorker.ready
-        .then(function (reg) { return reg.pushManager.getSubscription(); })
-        .then(function (sub) { return sub ? sub.unsubscribe() : true; })
-        .then(function () {
-          if (WORKER_URL && id) return workerPost('/unsubscribe', { id: id }).catch(function () {});
-        })
-        .then(function () {
-          paintToggle(false);
-          el.reminderTest.classList.add('hidden');
-          el.reminderStatus.textContent = 'Aus. Antippen für eine tägliche Erinnerung an deine offenen To-dos.';
-          showToast('Erinnerung ausgeschaltet');
+    let lastKind = null;
+    let pushCardDismissed = false;   // nur für diese Sitzung, nicht gespeichert
+
+    function paintPushCard(info) {
+      if (!el.pushCard) return;
+      // Nichts zu tun oder bewusst weggeklickt: Karte weg.
+      if (pushCardDismissed || info.kind === 'on' || info.kind === 'unsupported') {
+        el.pushCard.classList.add('hidden');
+        return;
+      }
+
+      el.pushCardSteps.classList.add('hidden');
+      el.pushCardBtn.classList.add('hidden');
+
+      if (info.kind === 'ios-install') {
+        el.pushCardTitle.textContent = 'Erinnerungen auf dem iPhone';
+        el.pushCardText.textContent = info.tooOld
+          ? 'Dafür braucht dein iPhone mindestens iOS 16.4. Danach muss die App zusätzlich auf dem Home-Bildschirm liegen – so geht das:'
+          : 'Safari kann Benachrichtigungen nur schicken, wenn die App auf dem Home-Bildschirm liegt. Das dauert 20 Sekunden:';
+        el.pushCardSteps.innerHTML = IOS_STEPS;
+        el.pushCardSteps.classList.remove('hidden');
+      } else if (info.kind === 'signedout') {
+        el.pushCardTitle.textContent = 'Tägliche Erinnerung';
+        el.pushCardText.textContent =
+          'Melde dich mit Google an – danach bekommst du täglich eine Meldung mit deinen offenen To-dos, auf allen deinen Geräten.';
+        el.pushCardBtn.textContent = 'Mit Google anmelden';
+        el.pushCardBtn.classList.remove('hidden');
+      } else if (info.kind === 'blocked') {
+        el.pushCardTitle.textContent = 'Benachrichtigungen sind blockiert';
+        el.pushCardText.textContent = 'Dein Browser hat sie für diese App gesperrt. ' + unblockHint();
+      } else {
+        el.pushCardTitle.textContent = 'Tägliche Erinnerung';
+        el.pushCardText.textContent =
+          'Ein Mal am Tag eine Meldung mit der Zahl deiner offenen To-dos – auch wenn die App geschlossen ist.';
+        el.pushCardBtn.textContent = 'Benachrichtigungen aktivieren';
+        el.pushCardBtn.classList.remove('hidden');
+      }
+      el.pushCard.classList.remove('hidden');
+    }
+
+    function paintSettingsReminder(info) {
+      syncTimeInput();
+      if (el.reminderDevices) el.reminderDevices.textContent = '';
+
+      if (info.kind !== 'on' && info.kind !== 'off') {
+        el.reminderToggle.classList.add('hidden');
+        showTimeRow(false);
+        el.reminderTest.classList.add('hidden');
+        if (info.kind === 'ios-install') {
+          el.reminderStatus.textContent = info.tooOld
+            ? 'Braucht mindestens iOS 16.4 und die App auf dem Home-Bildschirm: Teilen-Symbol → „Zum Home-Bildschirm“.'
+            : 'Dafür muss die App auf dem Home-Bildschirm liegen: Teilen-Symbol → „Zum Home-Bildschirm“. Danach die App von dort öffnen.';
+        } else if (info.kind === 'signedout') {
+          el.reminderStatus.textContent =
+            'Erst mit Google anmelden – die Erinnerung hängt an deinem Konto, damit sie auf allen deinen Geräten ankommt.';
+        } else if (info.kind === 'blocked') {
+          el.reminderStatus.textContent = 'Vom Browser blockiert. ' + unblockHint();
+        } else {
+          el.reminderStatus.textContent = 'Dieser Browser kann keine Benachrichtigungen empfangen.';
+        }
+        return;
+      }
+
+      // Uhrzeit-Wahl steht immer offen; der Test-Button erst, wenn es läuft.
+      showTimeRow(true);
+      paintToggle(info.kind === 'on');
+      el.reminderTest.classList.toggle('hidden', info.kind !== 'on');
+      el.reminderStatus.textContent = info.kind === 'on'
+        ? reminderActiveText()
+        : 'Aus. Antippen für eine tägliche Erinnerung an deine offenen To-dos.';
+      if (info.kind === 'on') refreshDeviceCount();
+    }
+
+    /** Zustand neu bestimmen und überall gleichzeitig anzeigen. */
+    function paintAll() {
+      return reminderState().then(function (info) {
+        lastKind = info.kind;
+        paintPushCard(info);
+        paintSettingsReminder(info);
+        return info;
+      }).catch(function () {
+        el.reminderStatus.textContent = 'Der Status liess sich gerade nicht ermitteln.';
+        return { kind: 'unknown' };
+      });
+    }
+
+    function enableReminder() {
+      if (!signedIn) {
+        showToast('Erst mit Google anmelden');
+        return Promise.resolve();
+      }
+      // Die Abfrage muss aus einem Tippen heraus kommen, sonst lehnt iOS ab.
+      return Notification.requestPermission().then(function (permission) {
+        if (permission !== 'granted') {
+          return paintAll().then(function () {
+            showToast(permission === 'denied'
+              ? 'Benachrichtigungen wurden blockiert.'
+              : 'Ohne Erlaubnis keine Erinnerung – du kannst es jederzeit erneut versuchen.');
+          });
+        }
+        return navigator.serviceWorker.ready.then(function (reg) {
+          // Ein bestehendes Abo weiterverwenden statt ein zweites anzulegen.
+          return reg.pushManager.getSubscription().then(function (existing) {
+            return existing || reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: vapidKeyBytes(VAPID_PUBLIC_KEY),
+            });
+          });
+        }).then(function () {
+          return registerDevice();
+        }).then(function (result) {
+          return paintAll().then(function () { return result; });
+        }).then(function (result) {
+          if (result && result.ok) { showToast('Erinnerung aktiviert'); return; }
+          const why = (result && result.data && result.data.error) ||
+                      (result && result.reason === 'no-url' ? 'WORKER_URL fehlt im Code (siehe worker/README.md)' : '') ||
+                      'Server nicht erreichbar';
+          el.reminderStatus.textContent =
+            'Auf diesem Gerät eingeschaltet, aber der Server hat es nicht übernommen: ' + why +
+            '. Schalt es später noch einmal aus und wieder ein.';
+          showToast('Server nicht erreichbar');
         });
+      }).catch(function () {
+        el.reminderStatus.textContent = isApple()
+          ? 'Das hat nicht geklappt. Prüf, ob die App wirklich vom Home-Bildschirm aus geöffnet ist.'
+          : 'Das hat nicht geklappt. Bitte erneut versuchen.';
+        showToast('Aktivieren fehlgeschlagen');
+      });
+    }
+
+    /**
+     * Meldet dieses Gerät ab: erst beim Push-Dienst, dann beim Worker. Die
+     * Reihenfolge ist wichtig – der Worker braucht den Endpoint zum Löschen.
+     */
+    function disableReminder(quiet) {
+      return currentSubscription().then(function (sub) {
+        const endpoint = sub ? sub.endpoint : '';
+        return Promise.resolve(sub ? sub.unsubscribe().catch(function () { return false; }) : true)
+          .then(function () {
+            if (!endpoint) return { ok: true };
+            return workerPost('/unsubscribe', { endpoint: endpoint });
+          });
+      }).then(function () {
+        if (quiet) return null;
+        return paintAll().then(function () { showToast('Erinnerung ausgeschaltet'); });
+      });
     }
 
     function sendTest() {
-      if (!WORKER_URL) { showToast('Worker-URL fehlt – siehe worker/README.md'); return; }
-      const id = state.settings.subscriberId;
-      if (!id) { showToast('Erst die Erinnerung aktivieren'); return; }
       showToast('Test wird gesendet …');
-      workerPost('/test', { id: id }).then(function (result) {
+      currentSubscription().then(function (sub) {
+        return workerPost('/test', { endpoint: sub ? sub.endpoint : '' });
+      }).then(function (result) {
         if (result.ok) {
           showToast('Test gesendet – gleich müsste die Meldung kommen');
-        } else if (result.status === 404 || result.status === 410) {
-          showToast('Abo abgelaufen – bitte aus- und wieder einschalten');
-          paintReminder();
-        } else {
-          showToast('Test fehlgeschlagen (' + result.status + ')');
+          return;
         }
+        if (result.status === 404 || result.status === 410) {
+          showToast('Abo abgelaufen – bitte aus- und wieder einschalten');
+          paintAll();
+          return;
+        }
+        if (result.status === 401 || result.reason === 'signed-out') {
+          showToast('Anmeldung abgelaufen – bitte neu anmelden');
+          return;
+        }
+        showToast('Test fehlgeschlagen' + (result.status ? ' (' + result.status + ')' : ''));
       }).catch(function () {
         showToast('Server nicht erreichbar');
       });
@@ -1596,16 +1885,21 @@
       state.settings.notifyHour = h;
       state.settings.notifyMinute = m;
       save();
-      const subscribed = el.reminderToggle.getAttribute('aria-checked') === 'true';
-      if (!subscribed) { showToast('Uhrzeit gespeichert'); return; }
+
+      // Uhrzeit und Zeitzone gehören zum Konto, nicht zum Gerät – sie stehen
+      // deshalb im Profil und gelten auf allen Geräten dieses Nutzers.
+      if (window.__taskSync && window.__taskSync.saveProfile) {
+        window.__taskSync.saveProfile({ notifyHour: h, notifyMinute: m, tz: currentTimeZone() });
+      }
+
+      if (lastKind !== 'on') { showToast('Uhrzeit gespeichert'); return; }
       el.reminderStatus.textContent = reminderActiveText();
-      if (!WORKER_URL) { showToast('Uhrzeit gespeichert (Worker-URL fehlt)'); return; }
-      pushSettingsToWorker().then(function (result) {
-        showToast(result && result.ok === false
-          ? 'Zeit lokal gespeichert – Server nicht erreichbar'
-          : 'Uhrzeit gespeichert');
-      }).catch(function () {
-        showToast('Zeit lokal gespeichert – Server nicht erreichbar');
+      workerPost('/settings', {
+        hour: h, minute: m, tz: currentTimeZone(), enabled: true,
+      }).then(function (result) {
+        showToast(result && result.ok
+          ? 'Uhrzeit gespeichert'
+          : 'Zeit lokal gespeichert – Server nicht erreichbar');
       });
     }
 
@@ -1620,11 +1914,42 @@
     el.reminderTest.addEventListener('click', sendTest);
     el.notifyTime.addEventListener('change', onTimeChange);
 
+    /* ---- Die Karte auf der Startseite ---- */
+    el.pushCardBtn.addEventListener('click', function () {
+      if (reminderBusy) return;
+      if (lastKind === 'signedout') {
+        openSettings();
+        if (window.__taskSync && window.__taskSync.signIn) window.__taskSync.signIn();
+        else showToast('Anmeldung lädt noch – kurz warten und erneut tippen.');
+        return;
+      }
+      reminderBusy = true;
+      Promise.resolve(enableReminder()).catch(function () {}).then(function () { reminderBusy = false; });
+    });
+
+    el.pushCardDismiss.addEventListener('click', function () {
+      pushCardDismissed = true;
+      el.pushCard.classList.add('hidden');
+    });
+
+    /**
+     * Nach einem Kontowechsel muss das Abo dieses Geräts dem NEUEN Konto
+     * zugeordnet werden – sonst bekäme der vorherige Nutzer weiter Push
+     * hierher. Der Worker entfernt den alten Eintrag dabei selbst.
+     */
+    function syncDeviceOnLogin() {
+      if (!pushSupported() || (isApple() && !isStandalone())) return;
+      currentSubscription().then(function (sub) {
+        if (sub) registerDevice();
+      });
+    }
+
     /* ---- Einstellungen-Menü (Zahnrad) öffnen / schließen ---- */
     let settingsOpen = false;
     function openSettings() {
       el.settingsModal.classList.remove('hidden');
-      paintReminder();
+      syncProfileInputs();
+      paintAll();
       requestAnimationFrame(function () {
         el.settingsBackdrop.classList.remove('opacity-0');
         el.settingsPanel.classList.remove('opacity-0', 'translate-y-6');
@@ -1650,9 +1975,126 @@
     });
 
     /* ============================================================
+       13a. Profil: Anzeigename, Onboarding, Einstellungen
+
+       Führend ist das Dokument profiles/<uid> in Firestore – der Name folgt
+       also dem Konto, nicht dem Gerät. Lokal liegt er zusätzlich, damit der
+       Titel schon beim ersten Bild steht und offline nicht zurückfällt.
+       ============================================================ */
+
+    function syncProfileInputs() {
+      if (el.profileName && document.activeElement !== el.profileName) {
+        el.profileName.value = displayName();
+      }
+      if (el.profileHint) {
+        el.profileHint.textContent = displayName()
+          ? 'Steht im Titel der App: „' + trackerTitle() + '“.'
+          : 'Ohne Namen heißt die App einfach „Task Tracker“.';
+      }
+    }
+
+    /** Übernimmt ein Profil lokal und in der Anzeige – schreibt NICHT in die Cloud. */
+    function applyProfile(patch) {
+      state.profile = sanitizeProfile(Object.assign({}, state.profile, patch));
+      // Uhrzeit der Erinnerung steht ebenfalls im Profil – sie folgt damit dem
+      // Konto und muss nicht auf jedem Gerät neu eingestellt werden.
+      if (patch && Number.isInteger(patch.notifyHour) && patch.notifyHour >= 0 && patch.notifyHour <= 23) {
+        state.settings.notifyHour = patch.notifyHour;
+      }
+      if (patch && Number.isInteger(patch.notifyMinute) && patch.notifyMinute >= 0 && patch.notifyMinute <= 59) {
+        state.settings.notifyMinute = patch.notifyMinute;
+      }
+      flushSave();
+      applyIdentity();
+      syncProfileInputs();
+      syncTimeInput();
+    }
+
+    /** Setzt den Namen und meldet ihn zusätzlich ans Konto in der Cloud. */
+    function saveDisplayName(rawName) {
+      const name = normalizeText(rawName).slice(0, 60);
+      applyProfile({ displayName: name });
+      if (window.__taskSync && window.__taskSync.saveProfile) {
+        window.__taskSync.saveProfile({ displayName: name });
+      }
+      return name;
+    }
+
+    /* ---- Onboarding-Dialog beim ersten Login ---- */
+    let onboardingOpen = false;
+
+    function updateOnboardingPreview() {
+      const owner = possessive(el.onboardingName.value);
+      el.onboardingPreview.textContent = owner
+        ? 'Deine Liste heißt dann „' + owner + ' Task Tracker“.'
+        : 'Ohne Namen heißt sie einfach „Task Tracker“.';
+    }
+
+    function openOnboarding(suggestion) {
+      if (onboardingOpen) return;
+      onboardingOpen = true;
+      el.onboardingName.value = normalizeText(suggestion).slice(0, 60);
+      updateOnboardingPreview();
+      el.onboardingModal.classList.remove('hidden');
+      requestAnimationFrame(function () {
+        el.onboardingBackdrop.classList.remove('opacity-0');
+        el.onboardingPanel.classList.remove('opacity-0', 'translate-y-6');
+      });
+      // Erst nach der Einblendung fokussieren – sonst schiebt iOS die Tastatur
+      // vor ein noch unsichtbares Feld.
+      setTimeout(function () {
+        try { el.onboardingName.focus(); el.onboardingName.select(); } catch (e) {}
+      }, 350);
+    }
+
+    function closeOnboarding() {
+      onboardingOpen = false;
+      el.onboardingBackdrop.classList.add('opacity-0');
+      el.onboardingPanel.classList.add('opacity-0', 'translate-y-6');
+      setTimeout(function () { if (!onboardingOpen) el.onboardingModal.classList.add('hidden'); }, 300);
+    }
+
+    function confirmOnboarding() {
+      const name = normalizeText(el.onboardingName.value);
+      if (!name) {
+        el.onboardingName.focus();
+        showToast('Gib einen Namen ein – oder wähl „Ohne Namen fortfahren“.');
+        return;
+      }
+      saveDisplayName(name);
+      closeOnboarding();
+      showToast('Willkommen, ' + name + '!');
+    }
+
+    el.onboardingName.addEventListener('input', updateOnboardingPreview);
+    el.onboardingName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); confirmOnboarding(); }
+    });
+    el.onboardingSave.addEventListener('click', confirmOnboarding);
+    el.onboardingSkip.addEventListener('click', function () {
+      // Leerer Name ist eine gültige Entscheidung: der Titel bleibt
+      // „Task Tracker". Gespeichert wird sie trotzdem, damit der Dialog nicht
+      // bei jedem Start wiederkommt.
+      saveDisplayName('');
+      closeOnboarding();
+      showToast('Alles klar – du kannst den Namen später in den Einstellungen setzen.');
+    });
+
+    /* ---- Name in den Einstellungen ändern ---- */
+    function saveProfileFromSettings() {
+      const name = saveDisplayName(el.profileName.value);
+      syncProfileInputs();
+      showToast(name ? 'Name gespeichert' : 'Name entfernt');
+    }
+    el.profileSave.addEventListener('click', saveProfileFromSettings);
+    el.profileName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); el.profileName.blur(); saveProfileFromSettings(); }
+    });
+
+    /* ============================================================
        13b. Google-Konto & Cloud-Sync (Firebase)
 
-       Die eigentliche Firebase-Logik steckt im <script type="module"> ganz
+       Die eigentliche Firebase-Logik steckt im Modul-Skript ganz
        unten. Hier liegt nur die Brücke: die App reicht ihren Stand nach oben
        (getSyncPayload), übernimmt Änderungen aus der Cloud (applySyncPayload –
        schreibt AUCH lokal, damit die Benachrichtigungen weiter stimmen) und
@@ -1667,8 +2109,8 @@
     window.__markAppReady = function () { if (resolveAppReady) { resolveAppReady(); resolveAppReady = null; } };
 
     // Nur die geräteübergreifenden Daten wandern in die Cloud. Bewusst NICHT
-    // dabei: settings (enthält die geräteeigene subscriberId für die Push-
-    // Benachrichtigungen) sowie day/celebrationsToday (reiner Tageszustand).
+    // dabei: settings und profile (laufen über profiles/<uid>) sowie
+    // day/celebrationsToday (reiner Tageszustand).
     function getSyncPayload() {
       return JSON.parse(JSON.stringify({
         tasks: state.tasks || [],
@@ -1704,6 +2146,14 @@
     // Zustände: loading | signedout | signing | signedin | error | unavailable
     function setAuthUi(info) {
       const status = info && info.status;
+
+      // Der Anmeldestatus entscheidet mit darüber, was bei den
+      // Benachrichtigungen angeboten wird – also beides zusammen aktualisieren.
+      const wasSignedIn = signedIn;
+      signedIn = status === 'signedin';
+      if (signedIn && !wasSignedIn) syncDeviceOnLogin();
+      paintAll();
+
       el.accountBadge.classList.add('hidden');
       el.accountSignin.classList.add('hidden');
       el.accountSignout.classList.add('hidden');
@@ -1740,6 +2190,28 @@
       getSyncPayload: getSyncPayload,
       applySyncPayload: applySyncPayload,
       setAuthUi: setAuthUi,
+
+      /* ---- Profil ---- */
+      getProfile: function () {
+        return { displayName: displayName(), uid: (state.profile && state.profile.uid) || null };
+      },
+      setProfile: applyProfile,
+
+      // Meldet sich ein ANDERES Konto an, darf der Name des vorherigen nicht
+      // stehen bleiben – bis das Profil aus der Cloud da ist, gilt der
+      // neutrale Titel.
+      beginUserSession: function (uid) {
+        if (state.profile && state.profile.uid && state.profile.uid !== uid) {
+          applyProfile({ displayName: '', uid: uid });
+        } else {
+          applyProfile({ uid: uid });
+        }
+      },
+
+      requestOnboarding: function (suggestion) {
+        if (displayName()) return;
+        openOnboarding(suggestion);
+      },
     };
 
     el.accountSignin.addEventListener('click', function () {
@@ -1750,10 +2222,16 @@
       }
     });
     el.accountSignout.addEventListener('click', function () {
-      if (window.__taskSync && window.__taskSync.signOut) {
-        window.__taskSync.signOut();
-        showToast('Abgemeldet – deine Aufgaben bleiben lokal erhalten.');
-      }
+      const sync = window.__taskSync;
+      if (!sync || !sync.signOut) return;
+      // Erst das Gerät abmelden – dafür braucht es das noch gültige Token.
+      // Sonst bekäme das abgemeldete Konto weiter Push auf dieses Gerät.
+      Promise.resolve(pushSupported() ? disableReminder(true) : null)
+        .catch(function () {})
+        .then(function () {
+          sync.signOut();
+          showToast('Abgemeldet – deine Aufgaben bleiben lokal erhalten.');
+        });
     });
 
     setAuthUi({ status: 'loading' });
@@ -1819,11 +2297,11 @@
       rollOverIfNeeded();
       render();
       describeStorage();
-      paintReminder();
+      paintAll();
       save();
     }).catch(function () {
       // Notfall (z. B. IndexedDB blockiert): wenigstens mit leerem Zustand rendern
-      try { state = emptyState(); render(); describeStorage(); paintReminder(); } catch (e) {}
+      try { state = emptyState(); render(); describeStorage(); paintAll(); } catch (e) {}
     }).then(function () {
       if (window.__splashBump) window.__splashBump(85);
       splashAppReady = true;
@@ -1832,10 +2310,46 @@
       if (window.__markAppReady) window.__markAppReady();
     });
 
-    /* Service Worker – macht die App offline nutzbar */
+    /* ============================================================
+       15. Service Worker – Offline-Betrieb und saubere Updates
+
+       Ohne Update-Behandlung bleibt in einer installierten PWA wochenlang
+       eine alte Fassung hängen: Der neue Service Worker wartet, die Seite
+       läuft weiter mit dem alten. Deshalb: skipWaiting im Service Worker,
+       hier ein einmaliges Neuladen, sobald er übernommen hat, plus
+       regelmässiges Nachsehen, ob es überhaupt etwas Neues gibt.
+       ============================================================ */
     if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+      // Beim allerersten Besuch gibt es noch keinen Controller – die
+      // Übernahme danach ist normal und darf KEIN Neuladen auslösen.
+      const hadController = !!navigator.serviceWorker.controller;
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (!hadController || reloading) return;
+        reloading = true;
+        location.reload();
+      });
+
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('./sw.js').catch(function () {});
+        navigator.serviceWorker.register('./sw.js').then(function (reg) {
+          const checkForUpdate = function () { reg.update().catch(function () {}); };
+          setInterval(checkForUpdate, 60 * 60 * 1000);
+          document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) checkForUpdate();
+          });
+        }).catch(function () {});
+      });
+
+      // Klick auf eine Benachrichtigung: die App ist schon offen, wir sollen
+      // nur zur Liste springen.
+      navigator.serviceWorker.addEventListener('message', function (event) {
+        if (event.data && event.data.type === 'SHOW_TASKS') {
+          hideCelebration();
+          if (settingsOpen) closeSettings();
+          checkDayChange();
+          render();
+          try { el.list.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+        }
       });
     }
   })();
@@ -1848,7 +2362,7 @@
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
     import {
       getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
-      onAuthStateChanged, signOut
+      onAuthStateChanged, signOut, getAdditionalUserInfo
     } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
     import {
       initializeFirestore, persistentLocalCache, persistentSingleTabManager,
@@ -1880,6 +2394,30 @@
 
     function bridge() { return window.__taskApp || null; }
     function setUi(info) { const b = bridge(); if (b && b.setAuthUi) b.setAuthUi(info); }
+
+    /* ---- Profil (profiles/<uid>) ------------------------------------
+       Bewusst ein EIGENES Dokument, getrennt von users/<uid>: dort schreibt
+       der Aufgaben-Sync mit setDoc() das komplette Dokument neu und würde ein
+       mitgeführtes Profil bei jeder Änderung überbügeln. */
+    let profileRef = null;
+    let unsubProfile = null;
+    // Vorname aus dem Google-Konto, nur direkt nach einer frischen Anmeldung
+    // verfügbar – dient als Vorschlag im Onboarding-Dialog.
+    let pendingGivenName = '';
+
+    function rememberGivenName(result) {
+      try {
+        const info = result ? getAdditionalUserInfo(result) : null;
+        const given = info && info.profile && info.profile.given_name;
+        if (typeof given === 'string' && given.trim()) pendingGivenName = given.trim();
+      } catch (e) {/* nicht schlimm – wir haben den Fallback unten */}
+      return result;
+    }
+
+    function firstNameOf(user) {
+      const full = (user && user.displayName ? String(user.displayName) : '').trim();
+      return full ? full.split(/\s+/)[0] : '';
+    }
     function localPayload() {
       const b = bridge();
       return (b && b.getSyncPayload) ? b.getSyncPayload()
@@ -1959,7 +2497,7 @@
         // scheitert zunehmend daran, dass Browser den Speicher-Zugriff des
         // Login-Helfers auf firebaseapp.com (andere Domain) blockieren. Geht das
         // Popup nicht (installierte iOS-App), automatisch auf Redirect ausweichen.
-        return signInWithPopup(auth, provider).catch(function (err) {
+        return signInWithPopup(auth, provider).then(rememberGivenName).catch(function (err) {
           const code = err && err.code ? String(err.code) : '';
           if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
             setUi({ status: 'signedout' });
@@ -1981,20 +2519,80 @@
         clearTimeout(pushTimer);
         pushTimer = setTimeout(doPush, 500);
       },
+
+      /**
+       * Frisches ID-Token für den Push-Worker. Firebase erneuert es selbst,
+       * wenn es abgelaufen ist. null heisst: nicht angemeldet.
+       */
+      getIdToken: function () {
+        const user = auth.currentUser;
+        if (!user) return Promise.resolve(null);
+        return user.getIdToken().catch(function () { return null; });
+      },
+
+      /** Teil-Aktualisierung des Profils (Name, Uhrzeit, Zeitzone). */
+      saveProfile: function (patch) {
+        if (!profileRef || !patch) return Promise.resolve(false);
+        const data = Object.assign({}, patch, { updatedAt: Date.now() });
+        return setDoc(profileRef, data, { merge: true })
+          .then(function () { return true; })
+          .catch(function () { return false; });
+      },
     };
 
     // Rückkehr vom Google-Redirect abfangen (Fehler sichtbar machen; der Nutzer
     // selbst kommt über onAuthStateChanged an).
-    getRedirectResult(auth).catch(function (err) {
+    getRedirectResult(auth).then(rememberGivenName).catch(function (err) {
       setUi({ status: 'error', message: friendly(err) });
     });
 
+    /**
+     * Profil des Kontos laden. Existiert das Dokument noch nicht, ist das
+     * der erste Login: entweder wird ein lokal schon vorhandener Name
+     * hochgeschrieben, oder der Onboarding-Dialog fragt danach – vorbefüllt
+     * mit dem Vornamen aus dem Google-Konto.
+     */
+    async function initProfile(user) {
+      const b = bridge();
+      profileRef = doc(db, 'profiles', user.uid);
+      if (b && b.beginUserSession) b.beginUserSession(user.uid);
+
+      try {
+        const snap = await getDoc(profileRef);
+        if (snap.exists()) {
+          // Vorhandenes Profil gewinnt – auch ein bewusst leerer Name.
+          if (b && b.setProfile) b.setProfile(snap.data());
+        } else {
+          const local = (b && b.getProfile) ? b.getProfile() : { displayName: '' };
+          if (local.displayName) {
+            // Name war schon lokal gesetzt (z. B. offline eingegeben) –
+            // einfach übernehmen, kein Dialog.
+            await setDoc(profileRef, { displayName: local.displayName, updatedAt: Date.now() }, { merge: true });
+          } else if (b && b.requestOnboarding) {
+            b.requestOnboarding(pendingGivenName || firstNameOf(user));
+          }
+        }
+      } catch (e) {
+        // Offline: der Live-Listener unten holt das Profil nach, sobald es geht.
+      }
+      pendingGivenName = '';
+
+      // Namensänderungen von anderen Geräten sofort übernehmen.
+      unsubProfile = onSnapshot(profileRef, function (snap) {
+        if (!snap.exists() || snap.metadata.hasPendingWrites) return;
+        const b2 = bridge();
+        if (b2 && b2.setProfile) b2.setProfile(snap.data());
+      }, function () {/* Listen-Fehler ignorieren */});
+    }
+
     onAuthStateChanged(auth, async function (user) {
       if (unsub) { unsub(); unsub = null; }
+      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
       lastSyncedJson = null;
 
       if (!user) {
         userRef = null;
+        profileRef = null;
         setUi({ status: 'signedout' });
         return;
       }
@@ -2004,6 +2602,8 @@
       // Warten, bis der lokale Stand geladen ist – sonst würden wir mit leerem
       // Stand zusammenführen und die lokalen Tasks verlieren.
       try { await window.__taskAppReady; } catch (e) {}
+
+      await initProfile(user);
 
       userRef = doc(db, 'users', user.uid);
 
