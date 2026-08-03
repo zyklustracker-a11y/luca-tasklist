@@ -58,9 +58,20 @@ Safari öffnen → Teilen → *Zum Home-Bildschirm*. Das Symbol kommt aus
 
 ## Mehrere Nutzer
 
-Die Adresse der App kann man weitergeben. Wer sie öffnet und sich mit seinem
-Google-Konto anmeldet, bekommt eine **eigene, isolierte Liste** und eigene
-Erinnerungen. Ohne Anmeldung läuft die App wie bisher rein lokal auf dem Gerät.
+Die Adresse der App kann man weitergeben. Wer sie öffnet und sich anmeldet,
+bekommt eine **eigene, isolierte Liste** und eigene Erinnerungen. Ohne
+Anmeldung läuft die App wie bisher rein lokal auf dem Gerät.
+
+Es gibt zwei gleichwertige Wege, beide im Zahnrad-Menü unter *Konto*:
+
+- **Mit Google** – ein Tipp, kein Passwort.
+- **Mit E-Mail und Passwort** – für alle ohne Google-Konto. Registrieren,
+  anmelden und Passwort zurücksetzen laufen direkt in der App.
+
+Technisch macht das keinen Unterschied: Firebase stellt in beiden Fällen
+dasselbe ID-Token aus, an dem Datenbank und Push-Worker das Konto erkennen.
+Beide Methoden müssen in der Firebase-Konsole unter **Authentication →
+Sign-in method** aktiviert sein.
 
 **Wie die Trennung durchgesetzt wird.** Nicht im Frontend, sondern an zwei
 Stellen serverseitig:
@@ -403,3 +414,25 @@ ausschliesslich aus dem Profil des angemeldeten Kontos.
 
 Nach jeder Änderung in `sw.js` die `CACHE_VERSION` hochzählen, sonst hält die
 installierte App die alte Fassung fest.
+
+### Achtung bei neuen Tailwind-Klassen
+
+`tailwind.css` ist **vorkompiliert** und enthält nur die Klassen, die beim
+letzten Build im HTML standen. Schreibt man später eine neue Klasse ins Markup –
+besonders eine mit freiem Wert wie `z-[120]` oder `min-h-[1.25rem]` –, fehlt sie
+in der fertigen Datei. Es gibt keine Fehlermeldung: die Klasse tut schlicht
+nichts. Genau so blieb einmal eine Bestätigungsmeldung hinter einem Dialog
+unsichtbar.
+
+Deshalb nach Änderungen am Markup:
+
+```bash
+node tools/check-classes.js
+```
+
+Meldet es etwas, das Stylesheet neu erzeugen und den Cache-Buster `?v=N` in
+`index.html` und `sw.js` hochzählen:
+
+```bash
+npx tailwindcss@3 -c tools/tailwind.config.js -i tools/input.css -o tailwind.css --minify
+```
