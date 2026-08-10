@@ -226,6 +226,25 @@ nichts zu löschen.
 - [ ] In den Einstellungen umbenennen → wirkt sofort, auch nach Neuladen.
 - [ ] Namen leeren → Titel fällt auf „Task Tracker" zurück.
 
+**Lange Task-Texte**
+
+- [ ] Neue Task anlegen, Enter drücken → es entsteht eine neue Zeile, es wird
+      **nicht** gespeichert. Das Feld wächst beim Tippen mit.
+- [ ] Strg+Enter (Mac: Cmd+Enter) → die Task wird angelegt.
+- [ ] Einen sehr langen Text einfügen → das Feld hört bei ca. 40 % der
+      Bildschirmhöhe auf zu wachsen und scrollt stattdessen.
+- [ ] In der Liste: mehrzeilige Task → höchstens drei Zeilen, darunter
+      „Mehr anzeigen". Klick → voller Text, „Weniger anzeigen" klappt zu.
+- [ ] Kurze Task → **kein** „Mehr anzeigen", Kästchen wie bisher mittig.
+- [ ] Bearbeiten-Stift bei einer mehrzeiligen Task → Umbrüche stehen unverändert
+      im Feld, Enter macht eine neue Zeile, Strg+Enter speichert, Esc bricht ab.
+- [ ] Lange Task abhaken → Verlauf öffnen: Umbrüche sind zu sehen, Text ist auf
+      drei Zeilen geklappt und lässt sich aufklappen.
+- [ ] *Backup speichern* → Datei enthält die Umbrüche als `\n`;
+      *Backup laden* stellt sie wieder her.
+- [ ] Bestehende (alte, kurze) Tasks nach dem Update neu laden → alle noch da,
+      nichts abgeschnitten.
+
 **iPhone**
 
 - [ ] Adresse in Safari öffnen (nicht installiert) → Karte zeigt die
@@ -303,6 +322,33 @@ Tage und Wochen hinweg.
   offen liegt. Gelöscht wird dabei nichts.
 - Die Konfetti-Animation kommt, wenn die letzte offene Task abgehakt ist und
   die Liste leer wird. Neue Task hinzufügen und abhaken → neue Animation.
+
+## Lange Task-Texte
+
+Eine Task ist ein einziges Textfeld – aber ein mehrzeiliges. Damit lässt sich
+statt eines Stichworts auch ein ganzer Absatz erfassen.
+
+- **Bis zu 2000 Zeichen** pro Task, Zeilenumbrüche inklusive. Wer mehr einfügt,
+  bekommt den Rest gekappt (`normalizeTaskText()` in `index.html`) – die Grenze
+  steht als `TASK_MAX` an einer Stelle und lässt sich dort ändern.
+- **Enter macht eine neue Zeile**, gespeichert wird mit dem Knopf oder mit
+  Strg+Enter (am Mac Cmd+Enter). Auf dem Handy gibt es kein Shift+Enter –
+  bliebe Enter auf „Speichern", käme man unterwegs nie an einen Umbruch.
+- **In der Liste** werden lange Texte nach drei Zeilen abgeschnitten. Der Knopf
+  „Mehr anzeigen" erscheint nur dort, wo wirklich etwas fehlt: ob der Text in
+  drei Zeilen passt, hängt von der Fensterbreite ab und wird nach jedem Rendern
+  nachgemessen (`updateExpandButtons()`), nicht anhand der Zeichenzahl geraten.
+  Beim Drehen des Handys wird neu gemessen. Der aufgeklappte Zustand ist reine
+  Ansichtssache und wird bewusst nicht gespeichert.
+- **Im Verlauf** gilt dasselbe Auf- und Zuklappen.
+- **In Meldungen und Vorlese-Beschriftungen** steht nur eine Kurzform: erste
+  Zeile, höchstens 60 Zeichen (`shortText()`). Sonst füllte ein „… hinzugefügt"
+  den halben Bildschirm.
+- **Am Datenmodell ändert sich nichts**: eine Task bleibt
+  `{ id, name, createdAt }`. Alte Einträge waren durch das frühere
+  `maxlength="120"` ohnehin kurz und einzeilig und passen unverändert – eine
+  Migration braucht es nicht, abgeschnitten wird nichts. Auch Backup-Dateien
+  aus älteren Ständen lassen sich weiterhin einlesen.
 
 ## Fortschritt und Streak
 

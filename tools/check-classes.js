@@ -55,7 +55,7 @@ for (const m of scripts.matchAll(/classList\.(add|remove|toggle|contains)\(([^)]
 
 // Klassennamen, die nur als Haken für JS oder CSS-Selektoren dienen und
 // bewusst keine eigene Regel haben.
-const HOOKS = new Set(['task-edit-input']);
+const HOOKS = new Set(['task-edit-input', 'task-text-wrap']);
 
 /** Tailwind maskiert Sonderzeichen im Selektor – und Kommas als \2c. */
 function selectorVariants(name) {
