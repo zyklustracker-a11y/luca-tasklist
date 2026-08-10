@@ -137,6 +137,32 @@
       text-decoration-color: rgba(34, 197, 94, 0.5);
     }
 
+    /* Eingabefelder für Task-Texte. Mehrzeilig, aber ohne den Anfasser zum
+       Ziehen: die Höhe stellt sich per JS (autoGrow) selbst ein. Ab einer
+       gewissen Länge hört das Wachsen auf und das Feld scrollt, damit das
+       Formular nicht den ganzen Bildschirm einnimmt. */
+    .task-input {
+      resize: none;
+      overflow-y: auto;
+      max-height: 40vh;
+      line-height: 1.5;
+    }
+
+    /* Der Task-Text selbst. pre-wrap hält eingegebene Zeilenumbrüche fest –
+       ohne diese Regel faltet HTML sie zu einem Leerzeichen zusammen. */
+    .task-text { white-space: pre-wrap; }
+
+    /* Zusammengeklappt: höchstens drei Zeilen, der Rest wird abgeschnitten.
+       Den Knopf zum Aufklappen blendet updateExpandButtons() nur dort ein,
+       wo wirklich etwas abgeschnitten ist. */
+    .task-text.clamped {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+
     .progress-fill { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
 
     .habit-row { transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.3s ease; }
@@ -382,11 +408,12 @@
         + Neue Task hinzufügen
       </button>
       <div id="add-habit-form" class="mt-3 hidden space-y-3 rounded-2xl border border-accent/30 bg-surface-800/80 p-4 shadow-card backdrop-blur-sm">
-        <label for="new-habit-input" class="sr-only">Name der neuen Task</label>
-        <input id="new-habit-input" type="text" maxlength="120" placeholder="Name der neuen Task…" enterkeyhint="done"
-          class="w-full rounded-xl border border-white/10 bg-surface-700/80 px-4 py-3.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+        <label for="new-habit-input" class="sr-only">Text der neuen Task</label>
+        <textarea id="new-habit-input" rows="1" maxlength="2000" placeholder="Was steht an? Mehrere Zeilen sind erlaubt…" enterkeyhint="enter"
+          class="task-input w-full rounded-xl border border-white/10 bg-surface-700/80 px-4 py-3.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"></textarea>
         <p class="text-xs leading-relaxed text-slate-500">
           Die Task bleibt stehen, bis du sie abhakst – auch über Tage hinweg.
+          Enter macht eine neue Zeile, Strg+Enter (am Mac Cmd+Enter) speichert.
         </p>
         <div class="flex gap-2">
           <button id="confirm-add-habit-btn" type="button"
@@ -758,12 +785,48 @@
       return String(text == null ? '' : text).replace(/\uFFFD/g, '').trim();
     }
 
+    /** Obergrenze f\u00FCr den Text einer Task. Grossz\u00FCgig, aber nicht unendlich \u2013
+        so bleibt ein versehentlich eingef\u00FCgter Roman aus der Zwischenablage
+        beherrschbar. */
+    const TASK_MAX = 2000;
+
+    /**
+     * Wie normalizeText, aber f\u00FCr mehrzeilige Task-Texte: Zeilenumbr\u00FCche
+     * bleiben erhalten (nur vereinheitlicht auf \n), Leerzeilenw\u00FCsten werden
+     * auf eine Leerzeile eingedampft, und am Ende wird bei TASK_MAX gekappt.
+     */
+    function normalizeTaskText(text) {
+      return normalizeText(text)
+        .replace(/\r\n?/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .slice(0, TASK_MAX);
+    }
+
+    /**
+     * Kurzform f\u00FCr Meldungen und Vorlese-Beschriftungen: nur die erste Zeile,
+     * h\u00F6chstens 60 Zeichen. Der gespeicherte Text bleibt davon unber\u00FChrt \u2013
+     * ohne das w\u00FCrde eine R\u00FCckmeldung wie \u201E\u2026 hinzugef\u00FCgt\u201C den halben
+     * Bildschirm f\u00FCllen.
+     */
+    function shortText(text) {
+      const full = normalizeTaskText(text);
+      const line = full.split('\n')[0].trim();
+      if (line.length > 60) return line.slice(0, 59).replace(/\s+$/, '') + '\u2026';
+      return line === full ? line : line + ' \u2026';
+    }
+
     /**
      * Migration. Bringt jeden bisherigen Stand auf das aktuelle Modell:
      * v1/v2 hiessen die Einträge "habits", v3 kannte zusätzlich den Typ
      * "daily" und ein done-Flag. Beides entfällt – aus täglichen werden
      * normale Tasks, und bereits abgehakte wandern in den Verlauf statt
      * verlorenzugehen.
+     *
+     * Seit den mehrzeiligen Texten läuft jeder Name zusätzlich durch
+     * normalizeTaskText(). Für Altbestand ändert das nichts: die alten
+     * Einträge waren durch maxlength="120" ohnehin kurz und einzeilig,
+     * gekappt wird erst ab TASK_MAX (2000). Ein eigener Migrationsschritt
+     * ist deshalb nicht nötig – das Datenmodell bleibt { id, name, createdAt }.
      */
     function normalize(raw) {
       const base = emptyState();
@@ -777,7 +840,7 @@
             const date = String(e.date).slice(0, 10);
             return {
               id: e.id || newId(),
-              name: normalizeText(e.name) || 'Unbenannt',
+              name: normalizeTaskText(e.name) || 'Unbenannt',
               date: date,
               createdAt: e.createdAt ? String(e.createdAt).slice(0, 10) : date,
             };
@@ -785,7 +848,7 @@
         : [];
 
       list.forEach(function (t) {
-        const name = normalizeText(t && t.name);
+        const name = normalizeTaskText(t && t.name);
         if (!name) return;
         const createdAt = String((t && t.createdAt) || fallbackDay).slice(0, 10);
         if (t && t.done) {
@@ -942,6 +1005,38 @@
     let editingId = null;
     let freshIds = new Set();
     let firstRender = true;
+    // Welche langen Texte gerade ausgeklappt sind. Reine Ansichtssache –
+    // wird bewusst nicht gespeichert, beim nächsten Start ist wieder alles
+    // ordentlich zusammengeklappt.
+    const expandedIds = new Set();
+
+    /**
+     * Lässt ein Textfeld mit seinem Inhalt mitwachsen. Erst auf 'auto'
+     * zurücksetzen, sonst kann das Feld beim Löschen von Text nie wieder
+     * kleiner werden. Nach oben begrenzt .task-input die Höhe per CSS – dann
+     * scrollt das Feld statt weiterzuwachsen.
+     */
+    function autoGrow(field) {
+      if (!field) return;
+      field.style.height = 'auto';
+      field.style.height = field.scrollHeight + 'px';
+    }
+
+    /**
+     * Blendet „Mehr anzeigen“ genau dort ein, wo der zusammengeklappte Text
+     * tatsächlich über drei Zeilen hinausgeht. Ob das der Fall ist, hängt von
+     * der Fensterbreite ab und lässt sich erst nach dem Rendern messen –
+     * geraten wird deshalb nichts.
+     */
+    function updateExpandButtons(root) {
+      if (!root) return;
+      root.querySelectorAll('.task-text.clamped').forEach(function (span) {
+        const wrap = span.closest('.task-text-wrap');
+        const btn = wrap ? wrap.querySelector('[data-action="expand"]') : null;
+        if (!btn) return;
+        btn.classList.toggle('hidden', span.scrollHeight <= span.clientHeight + 1);
+      });
+    }
 
     function escapeHtml(text) {
       return String(text)
@@ -1202,16 +1297,21 @@
     function taskRow(task, index) {
       const isEditing = editingId === task.id;
       const enter = firstRender || freshIds.has(task.id);
+      // Mehrzeilige und lange Texte oben ausrichten – bei kurzen bleibt es
+      // bei der vertikalen Mitte, damit einzeilige Zeilen aussehen wie bisher.
+      const tall = task.name.indexOf('\n') !== -1 || task.name.length > 60;
+      const rowShape = isEditing ? 'block' : ('flex gap-2 ' + (tall ? 'items-start' : 'items-center'));
       const rowClasses = [
-        'habit-row flex items-center gap-2 rounded-2xl border bg-surface-800/60 px-3 py-4 shadow-card backdrop-blur-sm sm:gap-3 sm:px-4',
+        'habit-row ' + rowShape + ' rounded-2xl border bg-surface-800/60 px-3 py-4 shadow-card backdrop-blur-sm sm:gap-3 sm:px-4',
         isEditing ? 'border-accent/30 ring-1 ring-accent/20' : 'border-white/5 hover:border-accent/20 hover:bg-surface-700/50',
       ].join(' ');
 
       if (isEditing) {
         return '<li>' +
-          '<div class="' + rowClasses.replace('flex items-center', 'block') + '" data-id="' + task.id + '">' +
-            '<input type="text" class="task-edit-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
-              'data-id="' + task.id + '" value="' + escapeHtml(task.name) + '" maxlength="120" enterkeyhint="done" aria-label="Task bearbeiten" />' +
+          '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
+            '<textarea class="task-edit-input task-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
+              'data-id="' + task.id + '" rows="1" maxlength="2000" enterkeyhint="enter" aria-label="Task bearbeiten">' + escapeHtml(task.name) + '</textarea>' +
+            '<p class="mt-2 text-xs leading-relaxed text-slate-500">Enter macht eine neue Zeile, Strg+Enter (am Mac Cmd+Enter) speichert.</p>' +
             '<div class="mt-3 flex gap-2">' +
               '<button type="button" data-action="save" data-id="' + task.id + '" class="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">Speichern</button>' +
               '<button type="button" data-action="cancel" data-id="' + task.id + '" class="rounded-xl border border-white/10 px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:text-slate-200">Abbrechen</button>' +
@@ -1220,16 +1320,23 @@
         '</li>';
       }
 
+      const expanded = expandedIds.has(task.id);
       return '<li class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
         '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
-          '<span class="flex shrink-0 items-center self-center">' +
-            '<input type="checkbox" class="habit-checkbox m-0 block self-center" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
-              'aria-label="' + escapeHtml(task.name) + ' abhaken" />' +
+          '<span class="flex shrink-0 items-center' + (tall ? '' : ' self-center') + '">' +
+            '<input type="checkbox" class="habit-checkbox m-0 block" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
+              'aria-label="' + escapeHtml(shortText(task.name)) + ' abhaken" />' +
           '</span>' +
-          '<label for="cb-' + task.id + '" class="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1">' +
-            '<span class="habit-label break-words text-base font-medium text-slate-200">' + escapeHtml(task.name) + '</span>' +
-            ageBadge(task) +
-          '</label>' +
+          '<div class="task-text-wrap flex min-w-0 flex-1 flex-col gap-1">' +
+            '<label for="cb-' + task.id + '" class="flex min-w-0 cursor-pointer flex-wrap items-baseline gap-x-2 gap-y-1">' +
+              '<span class="habit-label task-text' + (expanded ? '' : ' clamped') + ' min-w-0 break-words text-base font-medium text-slate-200">' + escapeHtml(task.name) + '</span>' +
+              ageBadge(task) +
+            '</label>' +
+            '<button type="button" data-action="expand" data-id="' + task.id + '" ' +
+              'class="' + (expanded ? '' : 'hidden ') + 'rounded-md text-left text-xs font-medium text-accent/70 transition hover:text-accent-glow">' +
+              (expanded ? 'Weniger anzeigen' : 'Mehr anzeigen') +
+            '</button>' +
+          '</div>' +
           '<div class="flex shrink-0 items-center gap-0.5">' +
             '<button type="button" class="rounded-lg p-2 text-slate-400 transition hover:bg-white/5 hover:text-accent-glow" data-action="edit" data-id="' + task.id + '" title="Bearbeiten" aria-label="Bearbeiten">' +
               '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>' +
@@ -1261,14 +1368,22 @@
 
       freshIds.clear();
       firstRender = false;
+      updateExpandButtons(el.list);
 
       if (editingId) {
         requestAnimationFrame(function () {
           const input = el.list.querySelector('.task-edit-input[data-id="' + editingId + '"]');
-          if (input) { input.focus(); input.select(); }
+          if (input) { autoGrow(input); input.focus(); input.select(); }
         });
       }
     }
+
+    // Ob ein Text in drei Zeilen passt, ändert sich mit der Fensterbreite –
+    // beim Drehen des Handys also neu nachmessen.
+    window.addEventListener('resize', function () {
+      updateExpandButtons(el.list);
+      updateExpandButtons(el.historyPanel);
+    });
 
     function render() {
       applyIdentity();
@@ -1315,14 +1430,22 @@
           '</div>' +
           (g.items.length
             ? '<ul class="mt-2 space-y-1">' + g.items.map(function (it) {
+                const open = expandedIds.has(it.id);
                 return '<li class="flex items-start gap-2 text-sm text-slate-400">' +
                   '<span class="mt-[3px] text-accent/70" aria-hidden="true">✓</span>' +
-                  '<span class="break-words">' + escapeHtml(it.name) + '</span>' +
+                  '<span class="task-text-wrap flex min-w-0 flex-1 flex-col gap-1">' +
+                    '<span class="task-text' + (open ? '' : ' clamped') + ' break-words">' + escapeHtml(it.name) + '</span>' +
+                    '<button type="button" data-action="expand" data-id="' + it.id + '" ' +
+                      'class="' + (open ? '' : 'hidden ') + 'rounded-md text-left text-xs font-medium text-accent/70 transition hover:text-accent-glow">' +
+                      (open ? 'Weniger anzeigen' : 'Mehr anzeigen') +
+                    '</button>' +
+                  '</span>' +
                 '</li>';
               }).join('') + '</ul>'
             : '<p class="mt-2 text-sm text-slate-600">Nichts abgehakt</p>') +
         '</div>';
       }).join('');
+      updateExpandButtons(el.historyPanel);
     }
 
     el.historyToggle.addEventListener('click', function () {
@@ -1331,14 +1454,29 @@
       if (!hidden) { renderHistory(); }
     });
 
+    // Auf- und Zuklappen langer Texte im Verlauf.
+    el.historyPanel.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-action="expand"]');
+      if (!btn) return;
+      toggleExpanded(btn.dataset.id);
+      renderHistory();
+    });
+
     /* ============================================================
        10. Aktionen
        ============================================================ */
+    /** Merkt sich, welcher lange Text ausgeklappt ist. */
+    function toggleExpanded(id) {
+      if (!id) return;
+      if (expandedIds.has(id)) expandedIds.delete(id);
+      else expandedIds.add(id);
+    }
+
     function addTask(name) {
-      const clean = normalizeText(name);
+      const clean = normalizeTaskText(name);
       if (!clean) {
         el.newInput.focus();
-        showToast('Gib der Task noch einen Namen.');
+        showToast('Gib der Task noch einen Text.');
         return false;
       }
       const task = { id: newId(), name: clean, createdAt: todayKey() };
@@ -1346,7 +1484,7 @@
       state.tasks.push(task);
       save();
       render();
-      showToast('„' + clean + '“ hinzugefügt');
+      showToast('„' + shortText(clean) + '“ hinzugefügt');
       return true;
     }
 
@@ -1399,7 +1537,7 @@
           // neue dazu und wird abgehakt, feiert es erneut.
           if (state.tasks.length === 0) celebrate();
 
-          showToast('„' + task.name + '“ erledigt', 'Rückgängig', function () {
+          showToast('„' + shortText(task.name) + '“ erledigt', 'Rückgängig', function () {
             const at = state.journal.lastIndexOf(entry);
             if (at !== -1) state.journal.splice(at, 1);
             hideCelebration();
@@ -1424,16 +1562,16 @@
         state.tasks.splice(i, 1);
         save();
         render();
-        showToast('„' + task.name + '“ gelöscht', 'Rückgängig', function () {
+        showToast('„' + shortText(task.name) + '“ gelöscht', 'Rückgängig', function () {
           restoreTask(task, position);
         });
       }, reduceMotion ? 0 : 180);
     }
 
     function saveEdit(id, rawName) {
-      const name = normalizeText(rawName);
+      const name = normalizeTaskText(rawName);
       if (!name) {
-        showToast('Der Name darf nicht leer sein.');
+        showToast('Der Text darf nicht leer sein.');
         const input = el.list.querySelector('.task-edit-input[data-id="' + id + '"]');
         if (input) input.focus();
         return;
@@ -1468,22 +1606,35 @@
       if (action === 'delete') return deleteTask(id);
       if (action === 'edit') { editingId = id; return renderList(); }
       if (action === 'cancel') { editingId = null; return renderList(); }
+      if (action === 'expand') { toggleExpanded(id); return renderList(); }
       if (action === 'save') {
         const input = el.list.querySelector('.task-edit-input[data-id="' + id + '"]');
         return saveEdit(id, input ? input.value : '');
       }
     });
 
+    /* Enter setzt im mehrzeiligen Feld eine neue Zeile – deshalb speichert
+       hier Strg+Enter (bzw. Cmd+Enter am Mac). Auf dem Handy führt der Weg
+       über den Speichern-Knopf, denn eine Shift-Taste gibt es dort nicht. */
     el.list.addEventListener('keydown', function (e) {
       if (!e.target.classList.contains('task-edit-input')) return;
-      if (e.key === 'Enter') { e.preventDefault(); saveEdit(e.target.dataset.id, e.target.value); }
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        saveEdit(e.target.dataset.id, e.target.value);
+      }
       if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderList(); }
+    });
+
+    // Das Bearbeitungsfeld wächst beim Tippen mit.
+    el.list.addEventListener('input', function (e) {
+      if (e.target.classList.contains('task-edit-input')) autoGrow(e.target);
     });
 
     function showAddForm() {
       el.showAddBtn.classList.add('hidden');
       el.addForm.classList.remove('hidden');
       el.newInput.value = '';
+      autoGrow(el.newInput);
       el.newInput.focus();
     }
 
@@ -1491,6 +1642,7 @@
       el.addForm.classList.add('hidden');
       el.showAddBtn.classList.remove('hidden');
       el.newInput.value = '';
+      autoGrow(el.newInput);
     }
 
     el.showAddBtn.addEventListener('click', showAddForm);
@@ -1498,14 +1650,19 @@
     el.confirmAdd.addEventListener('click', function () {
       if (addTask(el.newInput.value)) {
         el.newInput.value = '';
+        autoGrow(el.newInput);
         el.newInput.focus();
       }
     });
+    el.newInput.addEventListener('input', function () { autoGrow(el.newInput); });
+    /* Gleiche Regel wie beim Bearbeiten: Enter macht eine neue Zeile,
+       Strg+Enter bzw. Cmd+Enter legt die Task an. */
     el.newInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         if (addTask(el.newInput.value)) {
           el.newInput.value = '';
+          autoGrow(el.newInput);
         }
       }
       if (e.key === 'Escape') hideAddForm();
