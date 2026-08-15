@@ -245,6 +245,18 @@ nichts zu löschen.
 - [ ] Bestehende (alte, kurze) Tasks nach dem Update neu laden → alle noch da,
       nichts abgeschnitten.
 
+**Wieder offen**
+
+- [ ] Task abhaken → Verlauf öffnen → *Wieder offen* klicken: die Aufgabe steht
+      wieder in der Liste, der Fortschritt oben zählt sie als offen.
+- [ ] Im Toast *Rückgängig* → sie ist wieder im Verlauf, am selben Tag.
+- [ ] Aufgabe mit Anmerkung wieder öffnen → die Anmerkung ist noch dran.
+- [ ] Erneut abhaken → sie steht wieder im Verlauf, unter dem heutigen Tag.
+- [ ] Neu laden → der Stand bleibt, wie er war.
+- [ ] Mit zwei angemeldeten Geräten: auf Gerät A wieder öffnen → auf Gerät B
+      steht sie ebenfalls wieder in der offenen Liste und **nicht** mehr im
+      Verlauf.
+
 **iPhone**
 
 - [ ] Adresse in Safari öffnen (nicht installiert) → Karte zeigt die
@@ -318,10 +330,35 @@ Tage und Wochen hinweg.
 - **Abgehakte Tasks** verlassen die Liste sofort: kurze Bestätigung, dann
   wandern sie in den Verlauf und bleiben dort dauerhaft. Unmittelbar danach
   kannst du das über den Toast rückgängig machen.
+- **Doch noch nicht fertig?** Im Verlauf steht bei jedem Eintrag *Wieder
+  offen*. Ein Klick holt die Aufgabe zurück in die Liste – sie zählt sofort
+  wieder oben beim Fortschritt mit (siehe „Wieder offen").
 - Der Tageswechsel passiert automatisch um Mitternacht, auch wenn die App
   offen liegt. Gelöscht wird dabei nichts.
 - Die Konfetti-Animation kommt, wenn die letzte offene Task abgehakt ist und
   die Liste leer wird. Neue Task hinzufügen und abhaken → neue Animation.
+
+## Wieder offen
+
+Was im Verlauf steht, ist nicht in Stein gemeisselt. Jeder Eintrag hat neben
+*Anmerkung* den Knopf **Wieder offen**: die Aufgabe verschwindet aus dem
+Verlauf und steht wieder ganz normal in der Liste der offenen To-dos – mit
+ihrem Text, ihrer Anmerkung und ihrem ursprünglichen Erstellungsdatum.
+Fortschrittsanzeige, Streak und die Zahl in der Push-Erinnerung ziehen sofort
+nach, weil sie ohnehin bei jedem Rendern frisch aus dem Verlauf gerechnet
+werden. Direkt danach lässt sich das über den Toast rückgängig machen.
+
+Hakst du die Aufgabe später erneut ab, landet sie wieder im Verlauf – unter
+dem Tag, an dem du sie **erneut** abgehakt hast.
+
+**Warum das mehr ist als „Eintrag löschen".** Beim Sync werden die Verläufe
+beider Geräte immer *vereint*, damit nie etwas verlorengeht. Ein einfach
+gelöschter Eintrag käme vom anderen Gerät also sofort zurück. Deshalb merkt
+sich die App in `reopened` je Aufgabe den Zeitpunkt des Wiederöffnens; ein
+Verlaufseintrag zählt nur, wenn er *jünger* ist als dieser Zeitpunkt. Jedes
+Abhaken trägt dazu einen Zeitstempel `doneTs`. Alte Einträge ohne Stempel
+gelten als älter – für sie gewinnt das Wiederöffnen. Die Merkliste ist auf die
+300 jüngsten Einträge begrenzt.
 
 ## Lange Task-Texte
 
@@ -400,7 +437,7 @@ derselben Adresse anzumelden.
 
 | Dokument | Inhalt |
 |---|---|
-| `users/<uid>` | `tasks[]`, `journal[]`, `history{}`, `bestStreak` |
+| `users/<uid>` | `tasks[]`, `journal[]`, `reopened{}`, `history{}`, `bestStreak` |
 | `profiles/<uid>` | `displayName`, `notifyHour`, `notifyMinute`, `tz`, `updatedAt` |
 
 Bewusst getrennt: Der Aufgaben-Sync schreibt `users/<uid>` mit `setDoc()`

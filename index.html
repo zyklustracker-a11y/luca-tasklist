@@ -774,6 +774,7 @@
         celebrationsToday: 0,
         tasks: [],     // ausschliesslich offene Tasks – abgehakte wandern sofort ins Journal
         journal: [],   // jede erledigte Task, nach Datum – wird nie gelöscht
+        reopened: {},  // id → Zeitpunkt (ms), an dem eine Task wieder geöffnet wurde
         history: {},   // Altbestand aus Version 3, wird nur noch angezeigt
         settings: defaultSettings(),
         profile: defaultProfile(),
@@ -863,6 +864,50 @@
       return dst;
     }
 
+    /* ------------------------------------------------------------
+       Wieder geöffnete Aufgaben
+
+       Den Journal-Eintrag einfach zu löschen genügt nicht: beim Sync werden
+       die Journale beider Geräte VEREINT, der Eintrag käme also postwendend
+       zurück. Deshalb merkt sich state.reopened je id den Zeitpunkt des
+       Wiederöffnens. Ein Journal-Eintrag zählt nur, wenn er jünger ist als
+       dieser Zeitpunkt – dadurch verschwindet er zuverlässig, und ein
+       späteres erneutes Abhaken landet trotzdem wieder im Verlauf.
+       ------------------------------------------------------------ */
+    const MAX_REOPENED = 300;
+
+    function sanitizeReopened(raw) {
+      const out = {};
+      if (!raw || typeof raw !== 'object') return out;
+      Object.keys(raw).forEach(function (id) {
+        const t = Number(raw[id]);
+        if (id && isFinite(t) && t > 0) out[id] = t;
+      });
+      return pruneReopened(out);
+    }
+
+    /** Hält die Merkliste klein – nur die jüngsten Einträge werden gebraucht. */
+    function pruneReopened(map) {
+      const ids = Object.keys(map);
+      if (ids.length <= MAX_REOPENED) return map;
+      ids.sort(function (a, b) { return map[b] - map[a]; })
+        .slice(MAX_REOPENED)
+        .forEach(function (id) { delete map[id]; });
+      return map;
+    }
+
+    /** Zeitpunkt des Abhakens. Altbestand ohne Stempel gilt als "sehr alt". */
+    function doneStamp(entry) {
+      const t = Number(entry && entry.doneTs);
+      return isFinite(t) && t > 0 ? t : 0;
+    }
+
+    /** Ist dieser Journal-Eintrag durch ein Wiederöffnen überholt? */
+    function isReopened(entry, reopened) {
+      const at = reopened ? Number(reopened[entry && entry.id]) : 0;
+      return !!at && at >= doneStamp(entry);
+    }
+
     /**
      * Migration. Bringt jeden bisherigen Stand auf das aktuelle Modell:
      * v1/v2 hiessen die Einträge "habits", v3 kannte zusätzlich den Typ
@@ -883,16 +928,21 @@
       const list = Array.isArray(raw.tasks) ? raw.tasks : (Array.isArray(raw.habits) ? raw.habits : []);
       const fallbackDay = typeof raw.day === 'string' ? raw.day.slice(0, 10) : todayKey();
 
+      base.reopened = sanitizeReopened(raw.reopened);
+
       base.journal = Array.isArray(raw.journal)
         ? raw.journal.filter(function (e) { return e && e.name && e.date; }).map(function (e) {
             const date = String(e.date).slice(0, 10);
-            return carryNote(e, {
+            const entry = carryNote(e, {
               id: e.id || newId(),
               name: normalizeTaskText(e.name) || 'Unbenannt',
               date: date,
               createdAt: e.createdAt ? String(e.createdAt).slice(0, 10) : date,
             });
-          })
+            const ts = doneStamp(e);
+            if (ts) entry.doneTs = ts;
+            return entry;
+          }).filter(function (e) { return !isReopened(e, base.reopened); })
         : [];
 
       list.forEach(function (t) {
@@ -1347,7 +1397,7 @@
 
       const totalDone = state.journal.length;
       el.historySummary.textContent = totalDone
-        ? totalDone + (totalDone === 1 ? ' Task' : ' Tasks') + ' abgehakt – nichts davon wird gelöscht'
+        ? totalDone + (totalDone === 1 ? ' Task' : ' Tasks') + ' abgehakt – jede lässt sich wieder öffnen'
         : 'Hier landet alles, was du abhakst';
     }
 
@@ -1372,6 +1422,15 @@
         (has ? 'text-accent/70 hover:text-accent-glow' : 'text-slate-500 hover:text-slate-300') + '" ' +
         'aria-label="Anmerkung zu „' + escapeHtml(shortText(item.name)) + '“' + (has ? ' bearbeiten' : ' hinzufügen') + '">' +
         (has ? 'Anmerkung ✓' : 'Anmerkung') +
+      '</button>';
+    }
+
+    /** Holt eine erledigte Aufgabe aus dem Verlauf zurück in die offene Liste. */
+    function reopenButton(item) {
+      return '<button type="button" data-action="reopen" data-id="' + item.id + '" ' +
+        'class="self-start rounded-md text-left text-xs font-medium text-slate-500 transition hover:text-accent-glow" ' +
+        'aria-label="„' + escapeHtml(shortText(item.name)) + '“ wieder als offen markieren">' +
+        'Wieder offen' +
       '</button>';
     }
 
@@ -1527,7 +1586,10 @@
                           ? '<span class="text-[10px] text-slate-600">Zuletzt bearbeitet: ' + formatNoteTime(it.noteAt) + '</span>'
                           : '')
                       : '') +
-                    noteButton(it) +
+                    '<span class="flex flex-wrap items-center gap-3">' +
+                      noteButton(it) +
+                      reopenButton(it) +
+                    '</span>' +
                   '</span>' +
                 '</li>';
               }).join('') + '</ul>'
@@ -1543,12 +1605,13 @@
       if (!hidden) { renderHistory(); }
     });
 
-    // Auf- und Zuklappen langer Texte im Verlauf – und die Anmerkung, die
-    // auch bei erledigten Aufgaben noch geöffnet und geändert werden kann.
+    // Auf- und Zuklappen langer Texte im Verlauf, die Anmerkung (auch bei
+    // erledigten Aufgaben noch änderbar) und das Zurückholen in die offene Liste.
     el.historyPanel.addEventListener('click', function (e) {
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       if (btn.dataset.action === 'note') return openNoteModal(btn.dataset.id);
+      if (btn.dataset.action === 'reopen') return reopenTask(btn.dataset.id);
       if (btn.dataset.action !== 'expand') return;
       toggleExpanded(btn.dataset.id);
       renderHistory();
@@ -1620,8 +1683,13 @@
           const i = indexOfTask(id);                   // Index frisch bestimmen
           if (i === -1) return;
           state.tasks.splice(i, 1);
-          // carryNote: die Anmerkung samt Zeitstempel wandert mit in den Verlauf
-          const entry = carryNote(task, { id: task.id, name: task.name, date: todayKey(), createdAt: task.createdAt });
+          // carryNote: die Anmerkung samt Zeitstempel wandert mit in den Verlauf.
+          // doneTs hält den genauen Moment fest – daran erkennt der Sync, ob ein
+          // späteres Abhaken jünger ist als ein früheres Wiederöffnen.
+          const entry = carryNote(task, {
+            id: task.id, name: task.name, date: todayKey(), createdAt: task.createdAt, doneTs: Date.now(),
+          });
+          delete state.reopened[task.id];
           state.journal.push(entry);
           save();
           render();
@@ -1633,11 +1701,58 @@
           showToast('„' + shortText(task.name) + '“ erledigt', 'Rückgängig', function () {
             const at = state.journal.lastIndexOf(entry);
             if (at !== -1) state.journal.splice(at, 1);
+            markReopened(entry.id);
             hideCelebration();
             restoreTask(task, position);
           });
         }, reduceMotion ? 0 : 200);
       }, linger);
+    }
+
+    /** Vermerkt, dass ein Journal-Eintrag wieder geöffnet wurde. */
+    function markReopened(id) {
+      if (!id) return;
+      state.reopened[id] = Date.now();
+      pruneReopened(state.reopened);
+    }
+
+    /**
+     * Nimmt eine erledigte Aufgabe aus dem Verlauf zurück: sie steht sofort
+     * wieder in der Liste der offenen To-dos und zählt oben in der Leiste mit.
+     * Anmerkung und Erstellungsdatum kommen mit, die id bleibt dieselbe –
+     * beim nächsten Abhaken landet sie also wieder an derselben Stelle.
+     */
+    function reopenTask(id) {
+      const at = state.journal.findIndex(function (e) { return e.id === id; });
+      if (at === -1) return;
+      const entry = state.journal[at];
+      state.journal.splice(at, 1);
+      markReopened(entry.id);
+
+      if (indexOfTask(entry.id) === -1) {
+        const task = carryNote(entry, {
+          id: entry.id,
+          name: entry.name,
+          createdAt: entry.createdAt || entry.date,
+        });
+        state.tasks.push(task);
+        freshIds.add(task.id);
+      }
+      expandedIds.delete(entry.id);
+      save();
+      render();
+
+      showToast('„' + shortText(entry.name) + '“ wieder offen', 'Rückgängig', function () {
+        const i = indexOfTask(entry.id);
+        if (i !== -1) state.tasks.splice(i, 1);
+        delete state.reopened[entry.id];
+        // Frischer Stempel: damit der Eintrag auch dann bleibt, wenn ein
+        // anderes Gerät das Wiederöffnen schon mitbekommen hat.
+        entry.doneTs = Date.now();
+        state.journal.push(entry);
+        save();
+        render();
+      });
     }
 
     function deleteTask(id) {
@@ -2549,6 +2664,7 @@
       return JSON.parse(JSON.stringify({
         tasks: state.tasks || [],
         journal: state.journal || [],
+        reopened: state.reopened || {},
         history: state.history || {},
         bestStreak: state.bestStreak || 0,
       }));
@@ -2563,6 +2679,7 @@
       if (!payload || typeof payload !== 'object') return;
       if (Array.isArray(payload.tasks)) state.tasks = payload.tasks;
       if (Array.isArray(payload.journal)) state.journal = payload.journal;
+      state.reopened = sanitizeReopened(payload.reopened);
       if (payload.history && typeof payload.history === 'object') state.history = payload.history;
       state.bestStreak = Math.max(state.bestStreak || 0, Number(payload.bestStreak) || 0);
       rollOverIfNeeded();
@@ -3000,7 +3117,7 @@
     function localPayload() {
       const b = bridge();
       return (b && b.getSyncPayload) ? b.getSyncPayload()
-        : { tasks: [], journal: [], history: {}, bestStreak: 0 };
+        : { tasks: [], journal: [], reopened: {}, history: {}, bestStreak: 0 };
     }
     function applyPayload(p) { const b = bridge(); if (b && b.applySyncPayload) b.applySyncPayload(p); }
 
@@ -3048,16 +3165,70 @@
     }
 
     /* ---- Zusammenführen (rein rechnerisch, ohne Anzeige) ---- */
-    function unionJournal(a, b) {
+
+    // Dieses Modul hat einen eigenen Geltungsbereich und kommt an die Helfer
+    // des Haupt-Skripts nicht heran – die drei Zeilen stehen deshalb bewusst
+    // doppelt. Sie müssen mit der Fassung oben übereinstimmen.
+    const MAX_REOPENED = 300;
+    function doneStamp(entry) {
+      const t = Number(entry && entry.doneTs);
+      return isFinite(t) && t > 0 ? t : 0;
+    }
+    function isReopened(entry, reopened) {
+      const at = reopened ? Number(reopened[entry && entry.id]) : 0;
+      return !!at && at >= doneStamp(entry);
+    }
+    function pruneReopened(map) {
+      const ids = Object.keys(map);
+      if (ids.length <= MAX_REOPENED) return map;
+      ids.sort(function (a, b) { return map[b] - map[a]; })
+        .slice(MAX_REOPENED)
+        .forEach(function (id) { delete map[id]; });
+      return map;
+    }
+
+    // Wieder geöffnete Aufgaben: je id gilt der jüngere Zeitpunkt.
+    function mergeReopened(a, b) {
+      const out = {};
+      [a, b].forEach(function (src) {
+        if (!src || typeof src !== 'object') return;
+        Object.keys(src).forEach(function (id) {
+          const t = Number(src[id]);
+          if (id && isFinite(t) && t > 0 && t > (out[id] || 0)) out[id] = t;
+        });
+      });
+      return pruneReopened(out);
+    }
+
+    // Das Journal wird vereint – aber ein Eintrag, der seit dem Abhaken wieder
+    // geöffnet wurde, fällt raus. Sonst käme er vom anderen Gerät zurück.
+    function unionJournal(a, b, reopened) {
       const m = new Map();
       (Array.isArray(a) ? a : []).forEach(function (e) { if (e && e.id) m.set(e.id, e); });
-      (Array.isArray(b) ? b : []).forEach(function (e) { if (e && e.id) m.set(e.id, e); });
-      return Array.from(m.values());
+      (Array.isArray(b) ? b : []).forEach(function (e) {
+        if (!e || !e.id) return;
+        const seen = m.get(e.id);
+        // Bei doppelten ids gewinnt das jüngere Abhaken.
+        if (!seen || doneStamp(e) >= doneStamp(seen)) m.set(e.id, e);
+      });
+      return Array.from(m.values()).filter(function (e) { return !isReopened(e, reopened); });
     }
+
+    // Frisch wieder geöffnet: solche Aufgaben dürfen nicht verschwinden, nur
+    // weil die Cloud den Push noch nicht kennt. Nach kurzer Frist gilt wieder
+    // ganz normal die Cloud – sonst liesse sich so eine Aufgabe auf einem
+    // anderen Gerät nie mehr löschen.
+    const REOPEN_GRACE_MS = 5 * 60 * 1000;
+    function recentlyReopened(reopened, id) {
+      const at = reopened ? Number(reopened[id]) : 0;
+      return !!at && (Date.now() - at) < REOPEN_GRACE_MS;
+    }
+
     // Erstanmeldung: beide Seiten vereinen, damit nichts verlorengeht.
     function loginMerge(local, remote) {
       local = local || {}; remote = remote || {};
-      const journal = unionJournal(remote.journal, local.journal);
+      const reopened = mergeReopened(remote.reopened, local.reopened);
+      const journal = unionJournal(remote.journal, local.journal, reopened);
       const done = new Set(journal.map(function (e) { return e.id; }));
       const tm = new Map();
       (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
@@ -3066,6 +3237,7 @@
       return {
         tasks: tasks,
         journal: journal,
+        reopened: reopened,
         history: Object.assign({}, remote.history || {}, local.history || {}),
         bestStreak: Math.max(Number(local.bestStreak) || 0, Number(remote.bestStreak) || 0),
       };
@@ -3075,13 +3247,19 @@
     // erledigte Aufgaben nie verlorengehen.
     function reconcileRemote(local, remote) {
       local = local || {}; remote = remote || {};
-      const journal = unionJournal(remote.journal, local.journal);
+      const reopened = mergeReopened(remote.reopened, local.reopened);
+      const journal = unionJournal(remote.journal, local.journal, reopened);
       const done = new Set(journal.map(function (e) { return e.id; }));
-      const tasks = (Array.isArray(remote.tasks) ? remote.tasks : [])
-        .filter(function (t) { return t && t.id && !done.has(t.id); });
+      const tm = new Map();
+      (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
+        if (t && t.id && !tm.has(t.id) && recentlyReopened(local.reopened, t.id)) tm.set(t.id, t);
+      });
+      const tasks = Array.from(tm.values()).filter(function (t) { return !done.has(t.id); });
       return {
         tasks: tasks,
         journal: journal,
+        reopened: reopened,
         history: Object.assign({}, local.history || {}, remote.history || {}),
         bestStreak: Math.max(Number(local.bestStreak) || 0, Number(remote.bestStreak) || 0),
       };
@@ -3258,7 +3436,7 @@
       // Erstabgleich: lokalen und Cloud-Stand vereinen, hochschreiben, anwenden.
       try {
         const snap = await getDoc(userRef);
-        const remote = snap.exists() ? snap.data() : { tasks: [], journal: [], history: {}, bestStreak: 0 };
+        const remote = snap.exists() ? snap.data() : { tasks: [], journal: [], reopened: {}, history: {}, bestStreak: 0 };
         const merged = loginMerge(localPayload(), remote);
         lastSyncedJson = JSON.stringify(merged);
         await setDoc(userRef, merged);
