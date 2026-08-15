@@ -95,6 +95,7 @@
        offenen Fenster, und darunter würde man sie nie sehen. */
     #settings-modal { z-index: 90; }
     #onboarding-modal { z-index: 95; }
+    #note-modal { z-index: 96; }
     #celebration-overlay { z-index: 100; }
     #toast { z-index: 120; }
 
@@ -151,6 +152,10 @@
     /* Der Task-Text selbst. pre-wrap hält eingegebene Zeilenumbrüche fest –
        ohne diese Regel faltet HTML sie zu einem Leerzeichen zusammen. */
     .task-text { white-space: pre-wrap; }
+
+    /* Anmerkungstext im Verlauf – gleiche Regel, eigener Haken: er hängt
+       nicht am Auf-/Zuklapp-Mechanismus der Task-Texte. */
+    .note-text { white-space: pre-wrap; }
 
     /* Zusammengeklappt: höchstens drei Zeilen, der Rest wird abgeschnitten.
        Den Knopf zum Aufklappen blendet updateExpandButtons() nur dort ein,
@@ -614,6 +619,33 @@
     </div>
   </div>
 
+  <!-- Anmerkung zu einer Task: kleines Modal mit Textfeld. Eine Anmerkung
+       pro Task, Speichern überschreibt, Leeren entfernt sie samt Zeitstempel.
+       Öffnet aus der Liste und aus dem Verlauf – nie gleichzeitig mit den
+       Einstellungen, liegt aber sicherheitshalber darüber (z-96). -->
+  <div id="note-modal" class="fixed inset-0 hidden">
+    <div id="note-backdrop" class="absolute inset-0 bg-black/60 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
+    <div class="absolute inset-0 flex items-end justify-center px-4 pt-10 sm:items-center sm:p-6"
+         style="padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.5rem))">
+      <div id="note-panel"
+        class="relative w-full max-w-lg translate-y-6 rounded-3xl border border-white/10 bg-surface-800 p-6 opacity-0 shadow-card transition-all duration-300"
+        role="dialog" aria-modal="true" aria-labelledby="note-title">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Anmerkung</p>
+        <h2 id="note-title" class="mt-1 break-words text-lg font-semibold text-white"></h2>
+        <label for="note-input" class="sr-only">Anmerkung</label>
+        <textarea id="note-input" rows="5" maxlength="2000" class="task-input mt-3 w-full rounded-xl border border-white/10 bg-surface-700 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+          placeholder="z. B. Ergebnis oder Ausgang der Aufgabe"></textarea>
+        <p id="note-meta" class="mt-2 hidden text-xs text-slate-500"></p>
+        <div class="mt-4 flex gap-2">
+          <button id="note-save" type="button"
+            class="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">Speichern</button>
+          <button id="note-cancel" type="button"
+            class="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-medium text-slate-400 transition hover:text-slate-200">Abbrechen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Celebration -->
   <div id="celebration-overlay"
     class="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/25 opacity-0 backdrop-blur-[2px] transition-opacity duration-500"
@@ -816,6 +848,22 @@
     }
 
     /**
+     * Anmerkung einer Task: genau eine pro Task, als optionale Felder
+     * note (Text) und noteAt (Zeitpunkt des letzten Speicherns, ISO-String).
+     * Übernimmt beide von src nach dst – aber nur, wenn wirklich Text da ist.
+     * Fehlen die Felder (Altbestand), bleibt dst einfach ohne sie: leere
+     * Anmerkung. Ein kaputter Zeitstempel wird verworfen statt angezeigt.
+     */
+    function carryNote(src, dst) {
+      const note = normalizeTaskText(src && src.note);
+      if (!note) return dst;
+      dst.note = note;
+      const t = Date.parse(src.noteAt);
+      if (!isNaN(t)) dst.noteAt = new Date(t).toISOString();
+      return dst;
+    }
+
+    /**
      * Migration. Bringt jeden bisherigen Stand auf das aktuelle Modell:
      * v1/v2 hiessen die Einträge "habits", v3 kannte zusätzlich den Typ
      * "daily" und ein done-Flag. Beides entfällt – aus täglichen werden
@@ -838,12 +886,12 @@
       base.journal = Array.isArray(raw.journal)
         ? raw.journal.filter(function (e) { return e && e.name && e.date; }).map(function (e) {
             const date = String(e.date).slice(0, 10);
-            return {
+            return carryNote(e, {
               id: e.id || newId(),
               name: normalizeTaskText(e.name) || 'Unbenannt',
               date: date,
               createdAt: e.createdAt ? String(e.createdAt).slice(0, 10) : date,
-            };
+            });
           })
         : [];
 
@@ -852,14 +900,14 @@
         if (!name) return;
         const createdAt = String((t && t.createdAt) || fallbackDay).slice(0, 10);
         if (t && t.done) {
-          base.journal.push({
+          base.journal.push(carryNote(t, {
             id: (t && t.id) || newId(),
             name: name,
             date: String(t.doneAt || fallbackDay).slice(0, 10),
             createdAt: createdAt,
-          });
+          }));
         } else {
-          base.tasks.push({ id: (t && t.id) || newId(), name: name, createdAt: createdAt });
+          base.tasks.push(carryNote(t, { id: (t && t.id) || newId(), name: name, createdAt: createdAt }));
         }
       });
 
@@ -991,6 +1039,14 @@
       settingsPanel: document.getElementById('settings-panel'),
       settingsBackdrop: document.getElementById('settings-backdrop'),
       settingsClose: document.getElementById('settings-close'),
+      noteModal: document.getElementById('note-modal'),
+      noteBackdrop: document.getElementById('note-backdrop'),
+      notePanel: document.getElementById('note-panel'),
+      noteTitle: document.getElementById('note-title'),
+      noteInput: document.getElementById('note-input'),
+      noteMeta: document.getElementById('note-meta'),
+      noteSave: document.getElementById('note-save'),
+      noteCancel: document.getElementById('note-cancel'),
       toast: document.getElementById('toast'),
       toastText: document.getElementById('toast-text'),
       toastAction: document.getElementById('toast-action'),
@@ -1102,6 +1158,15 @@
       const diff = daysBetween(key, today);
       if (diff === 1) return 'Gestern';
       return parseKey(key).toLocaleDateString('de-CH', { weekday: 'short', day: 'numeric', month: 'long' });
+    }
+
+    /** „14.08.2026, 15:42" – Zeitpunkt des letzten Speicherns einer Anmerkung. */
+    function formatNoteTime(iso) {
+      const t = Date.parse(iso);
+      if (isNaN(t)) return '';
+      const d = new Date(t);
+      return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+        ', ' + d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
     }
 
     /* ---- Name & Titel ------------------------------------------------
@@ -1294,6 +1359,22 @@
       return '';
     }
 
+    /**
+     * Kleiner, bewusst unauffälliger Knopf unter dem Task-Text. Mit
+     * hinterlegter Anmerkung zeigt er ein Häkchen und etwas Farbe – so sieht
+     * man auf einen Blick, wo schon etwas steht, ohne dass die Liste unruhig
+     * wird.
+     */
+    function noteButton(item) {
+      const has = !!item.note;
+      return '<button type="button" data-action="note" data-id="' + item.id + '" ' +
+        'class="self-start rounded-md text-left text-xs font-medium transition ' +
+        (has ? 'text-accent/70 hover:text-accent-glow' : 'text-slate-500 hover:text-slate-300') + '" ' +
+        'aria-label="Anmerkung zu „' + escapeHtml(shortText(item.name)) + '“' + (has ? ' bearbeiten' : ' hinzufügen') + '">' +
+        (has ? 'Anmerkung ✓' : 'Anmerkung') +
+      '</button>';
+    }
+
     function taskRow(task, index) {
       const isEditing = editingId === task.id;
       const enter = firstRender || freshIds.has(task.id);
@@ -1336,6 +1417,7 @@
               'class="' + (expanded ? '' : 'hidden ') + 'rounded-md text-left text-xs font-medium text-accent/70 transition hover:text-accent-glow">' +
               (expanded ? 'Weniger anzeigen' : 'Mehr anzeigen') +
             '</button>' +
+            noteButton(task) +
           '</div>' +
           '<div class="flex shrink-0 items-center gap-0.5">' +
             '<button type="button" class="rounded-lg p-2 text-slate-400 transition hover:bg-white/5 hover:text-accent-glow" data-action="edit" data-id="' + task.id + '" title="Bearbeiten" aria-label="Bearbeiten">' +
@@ -1439,6 +1521,13 @@
                       'class="' + (open ? '' : 'hidden ') + 'rounded-md text-left text-xs font-medium text-accent/70 transition hover:text-accent-glow">' +
                       (open ? 'Weniger anzeigen' : 'Mehr anzeigen') +
                     '</button>' +
+                    (it.note
+                      ? '<span class="note-text break-words text-xs leading-relaxed text-slate-500">' + escapeHtml(it.note) + '</span>' +
+                        (it.noteAt
+                          ? '<span class="text-[10px] text-slate-600">Zuletzt bearbeitet: ' + formatNoteTime(it.noteAt) + '</span>'
+                          : '')
+                      : '') +
+                    noteButton(it) +
                   '</span>' +
                 '</li>';
               }).join('') + '</ul>'
@@ -1454,10 +1543,13 @@
       if (!hidden) { renderHistory(); }
     });
 
-    // Auf- und Zuklappen langer Texte im Verlauf.
+    // Auf- und Zuklappen langer Texte im Verlauf – und die Anmerkung, die
+    // auch bei erledigten Aufgaben noch geöffnet und geändert werden kann.
     el.historyPanel.addEventListener('click', function (e) {
-      const btn = e.target.closest('[data-action="expand"]');
+      const btn = e.target.closest('[data-action]');
       if (!btn) return;
+      if (btn.dataset.action === 'note') return openNoteModal(btn.dataset.id);
+      if (btn.dataset.action !== 'expand') return;
       toggleExpanded(btn.dataset.id);
       renderHistory();
     });
@@ -1528,7 +1620,8 @@
           const i = indexOfTask(id);                   // Index frisch bestimmen
           if (i === -1) return;
           state.tasks.splice(i, 1);
-          const entry = { id: task.id, name: task.name, date: todayKey(), createdAt: task.createdAt };
+          // carryNote: die Anmerkung samt Zeitstempel wandert mit in den Verlauf
+          const entry = carryNote(task, { id: task.id, name: task.name, date: todayKey(), createdAt: task.createdAt });
           state.journal.push(entry);
           save();
           render();
@@ -1586,6 +1679,84 @@
     }
 
     /* ============================================================
+       10a. Anmerkungen
+       Genau eine Anmerkung pro Task, gespeichert direkt am Task- bzw.
+       Journal-Eintrag (Felder note + noteAt) – sie läuft damit automatisch
+       über denselben Speicher- und Sync-Weg wie alles andere. Das Modal
+       folgt dem Muster der Einstellungen: Backdrop, Escape, Einblendung.
+       ============================================================ */
+    let noteOpen = false;
+    let noteTargetId = null;
+
+    /** Findet den Träger einer Anmerkung – erst offene Tasks, dann Verlauf. */
+    function findNotable(id) {
+      return state.tasks.find(function (t) { return t.id === id; }) ||
+        state.journal.find(function (e) { return e.id === id; }) || null;
+    }
+
+    function openNoteModal(id) {
+      const target = findNotable(id);
+      if (!target) return;
+      noteTargetId = id;
+      noteOpen = true;
+      el.noteTitle.textContent = shortText(target.name);
+      el.noteInput.value = target.note || '';
+      el.noteMeta.textContent = target.noteAt ? 'Zuletzt bearbeitet: ' + formatNoteTime(target.noteAt) : '';
+      el.noteMeta.classList.toggle('hidden', !target.noteAt);
+      el.noteModal.classList.remove('hidden');
+      requestAnimationFrame(function () {
+        el.noteBackdrop.classList.remove('opacity-0');
+        el.notePanel.classList.remove('opacity-0', 'translate-y-6');
+        // Fokus ins Textfeld, Schreibmarke ans Ende des vorhandenen Textes.
+        el.noteInput.focus();
+        const len = el.noteInput.value.length;
+        try { el.noteInput.setSelectionRange(len, len); } catch (e) {}
+      });
+    }
+
+    function closeNoteModal() {
+      noteOpen = false;
+      noteTargetId = null;
+      el.noteBackdrop.classList.add('opacity-0');
+      el.notePanel.classList.add('opacity-0', 'translate-y-6');
+      setTimeout(function () { if (!noteOpen) el.noteModal.classList.add('hidden'); }, 300);
+    }
+
+    /** Speichert die Anmerkung: neuer Text überschreibt, leerer Text löscht
+        sie samt Zeitstempel. noteAt ist immer „zuletzt gespeichert". */
+    function saveNote() {
+      const target = noteTargetId ? findNotable(noteTargetId) : null;
+      if (!target) return closeNoteModal();
+      const text = normalizeTaskText(el.noteInput.value);
+      if (text) {
+        target.note = text;
+        target.noteAt = new Date().toISOString();
+      } else {
+        delete target.note;
+        delete target.noteAt;
+      }
+      save();
+      render();
+      closeNoteModal();
+      showToast(text ? 'Anmerkung gespeichert' : 'Anmerkung entfernt');
+    }
+
+    el.noteSave.addEventListener('click', saveNote);
+    el.noteCancel.addEventListener('click', closeNoteModal);
+    // Tippen ausserhalb des Panels schliesst – gleiche Begründung wie bei den
+    // Einstellungen: der zentrierende Wrapper liegt über dem Backdrop.
+    el.noteModal.addEventListener('click', function (e) {
+      if (!el.notePanel.contains(e.target)) closeNoteModal();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && noteOpen) { e.preventDefault(); closeNoteModal(); }
+    });
+    // Strg+Enter (Cmd+Enter am Mac) speichert – wie beim Bearbeiten der Tasks.
+    el.noteInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNote(); }
+    });
+
+    /* ============================================================
        11. Events
        ============================================================ */
     el.list.addEventListener('change', function (e) {
@@ -1604,6 +1775,7 @@
       const action = btn.dataset.action;
 
       if (action === 'delete') return deleteTask(id);
+      if (action === 'note') return openNoteModal(id);
       if (action === 'edit') { editingId = id; return renderList(); }
       if (action === 'cancel') { editingId = null; return renderList(); }
       if (action === 'expand') { toggleExpanded(id); return renderList(); }
