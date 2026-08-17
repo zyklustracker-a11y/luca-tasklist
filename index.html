@@ -1860,7 +1860,8 @@
 
       const expanded = expandedIds.has(task.id);
       return '<li data-id="' + task.id + '" class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
-        '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
+        // tabindex: Zeile fokussierbar für den Tastatur-Fallback (Alt+Pfeil).
+        '<div class="' + rowClasses + '" data-id="' + task.id + '" tabindex="0">' +
           numberBadge +
           '<span class="flex shrink-0 items-center' + (tall ? '' : ' self-center') + '">' +
             '<input type="checkbox" class="habit-checkbox m-0 block" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
@@ -2521,6 +2522,43 @@
     // Das Bearbeitungsfeld wächst beim Tippen mit.
     el.list.addEventListener('input', function (e) {
       if (e.target.classList.contains('task-edit-input')) autoGrow(e.target);
+    });
+
+    /**
+     * Tastatur-Fallback zum Umsortieren: Alt + Pfeil hoch/runter verschiebt
+     * die fokussierte Task um eine Position. Am Sektionsrand wechselt sie
+     * zuerst die Sektion (gleiche Regeln wie beim Ziehen über die
+     * Trennlinie), der Fokus bleibt auf der Zeile.
+     */
+    function moveTaskBy(id, delta) {
+      const task = state.tasks.find(function (t) { return t.id === id; });
+      if (!task) return;
+      const list = sectionTasks(task.prioritized);
+      const idx = list.findIndex(function (t) { return t.id === id; });
+      if (delta > 0 && idx === list.length - 1) {
+        if (!task.prioritized) return;               // schon ganz unten
+        placeTask(task, false, 0);                   // über die Trennlinie nach unten
+      } else if (delta < 0 && idx === 0) {
+        if (task.prioritized) return;                // schon ganz oben
+        placeTask(task, true, Infinity);             // über die Trennlinie nach oben
+      } else {
+        // innerhalb der Sektion: vor den oberen bzw. hinter den unteren
+        // Nachbarn (Index bezieht sich auf die Liste OHNE die Task selbst).
+        placeTask(task, task.prioritized, delta > 0 ? idx + 1 : idx - 1);
+      }
+      save();
+      render();
+      const row = el.list.querySelector('.habit-row[data-id="' + id + '"]');
+      if (row) row.focus();
+    }
+
+    el.list.addEventListener('keydown', function (e) {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      if (e.target.classList && e.target.classList.contains('task-edit-input')) return;
+      const row = e.target.closest ? e.target.closest('.habit-row[data-id]') : null;
+      if (!row) return;
+      e.preventDefault();
+      moveTaskBy(row.dataset.id, e.key === 'ArrowDown' ? 1 : -1);
     });
 
     /* ============================================================
