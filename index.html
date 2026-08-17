@@ -96,6 +96,7 @@
     #settings-modal { z-index: 90; }
     #onboarding-modal { z-index: 95; }
     #note-modal { z-index: 96; }
+    #add-sheet { z-index: 97; }
     #celebration-overlay { z-index: 100; }
     #toast { z-index: 120; }
 
@@ -169,6 +170,192 @@
     }
 
     .progress-fill { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    /* ---- Zwei Sektionen: Priorisierte Tasks / Weitere Tasks ----
+       Bewusst eigene Klassen statt neuer Tailwind-Utilities: die
+       vorkompilierte tailwind.css kennt nur Klassen, die beim letzten Build
+       im HTML standen – neue blieben stumm (siehe Kommentar oben). */
+    .section-title {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.75rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: #64748b;
+    }
+    .section-title-prio { color: rgba(74, 222, 128, 0.9); }
+    .section-divider {
+      height: 1px; margin: 1.25rem 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    /* Leere Prio-Sektion: die Liste selbst bleibt als Drop-Zone stehen
+       (mind. 64 px hoch), der Hinweis liegt als reiner Text darüber.
+       Sobald ein Element drin ist – auch der Drag-Platzhalter –, ist
+       :empty nicht mehr wahr und beides verschwindet von selbst. */
+    .prio-zone { position: relative; }
+    #prio-list:empty {
+      min-height: 64px;
+      border: 1px dashed rgba(74, 222, 128, 0.25);
+      border-radius: 1rem;
+      background: rgba(34, 197, 94, 0.04);
+    }
+    .prio-empty {
+      display: none;
+      position: absolute; inset: 0;
+      align-items: center; justify-content: center;
+      padding: 0.5rem 1.25rem;
+      text-align: center;
+      font-size: 0.75rem; line-height: 1.5;
+      color: rgba(148, 163, 184, 0.75);
+      pointer-events: none;
+    }
+    #prio-list:empty + .prio-empty { display: flex; }
+
+    /* Abgeleitete Nummerierung: die Zahl steht nur im DOM, nie im Modell.
+       Plätze 1–3 kräftig (voller Kreis + Balken links), ab Platz 4 dezent. */
+    .prio-num {
+      display: flex; align-items: center; justify-content: center;
+      width: 1.5rem; height: 1.5rem; flex-shrink: 0;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem; font-weight: 600;
+    }
+    .prio-num-hot {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #04120a;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+    }
+    .prio-num-soft {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #94a3b8;
+    }
+    .habit-row.prio-top { position: relative; }
+    .habit-row.prio-top::before {
+      content: '';
+      position: absolute; left: -1px; top: 14%; bottom: 14%; width: 3px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #4ade80, #16a34a);
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+    }
+
+    /* ---- Bottom Sheet beim Anlegen ---- */
+    .sheet-panel {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      margin: 0 auto; max-width: 32rem;
+      border: 1px solid rgba(255, 255, 255, 0.1); border-bottom: none;
+      border-radius: 1.5rem 1.5rem 0 0;
+      background: #101913;
+      box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.6);
+      /* safe-area: sonst kleben die Buttons am Home-Indicator */
+      padding: 0.375rem 1.25rem calc(env(safe-area-inset-bottom) + 1rem);
+      transform: translateY(100%);
+      transition: transform 0.32s cubic-bezier(0.32, 0.72, 0.22, 1);
+      touch-action: none;               /* Wisch nach unten gehört dem Sheet */
+    }
+    .sheet-panel.sheet-open { transform: translateY(0); }
+    .sheet-grabber {
+      width: 2.5rem; height: 0.3rem; margin: 0.375rem auto 0.875rem;
+      border-radius: 9999px; background: rgba(255, 255, 255, 0.18);
+    }
+    .sheet-title { font-size: 1rem; font-weight: 600; color: #f1f5f9; overflow-wrap: anywhere; }
+    .sheet-sub { margin-top: 0.375rem; font-size: 0.75rem; line-height: 1.5; color: #94a3b8; }
+    .sheet-actions { display: flex; gap: 0.5rem; margin-top: 1.125rem; }
+    .sheet-btn {
+      flex: 1; min-height: 44px;         /* Trefferfläche mind. 44 px */
+      padding: 0.625rem 0.75rem;
+      border-radius: 0.875rem;
+      font-size: 0.9375rem; font-weight: 600;
+      transition: transform 0.15s ease, background 0.2s ease;
+    }
+    .sheet-btn:active { transform: scale(0.97); }
+    .sheet-btn-primary { background: linear-gradient(90deg, #16a34a, #22c55e); color: #06130b; }
+    .sheet-btn-secondary { border: 1px solid rgba(255, 255, 255, 0.14); color: #cbd5e1; }
+    .sheet-steps { position: relative; }
+    .sheet-step { transition: transform 0.28s ease, opacity 0.28s ease; }
+    .step-enter-right { transform: translateX(32px); opacity: 0; }
+    .step-enter-left { transform: translateX(-32px); opacity: 0; }
+    .sheet-slots {
+      display: flex; flex-direction: column; gap: 0.375rem;
+      margin-top: 0.875rem; padding-bottom: 0.25rem;
+      max-height: 45vh; overflow-y: auto;
+      overscroll-behavior: contain;
+      touch-action: pan-y;              /* hier darf normal gescrollt werden */
+    }
+    .slot-btn {
+      display: flex; align-items: center; gap: 0.625rem;
+      min-height: 44px; padding: 0.375rem 0.75rem;
+      border: 1px dashed rgba(74, 222, 128, 0.4); border-radius: 0.75rem;
+      background: rgba(34, 197, 94, 0.06);
+      color: #4ade80; font-size: 0.8125rem; font-weight: 600;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    .slot-btn::before, .slot-btn::after {
+      content: ''; flex: 1; height: 1px; background: rgba(74, 222, 128, 0.22);
+    }
+    .slot-btn:active { background: rgba(34, 197, 94, 0.18); border-color: rgba(74, 222, 128, 0.7); }
+    .slot-task {
+      display: flex; align-items: center; gap: 0.625rem;
+      padding: 0.25rem 0.5rem; color: #cbd5e1; font-size: 0.875rem;
+    }
+    .slot-task-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ---- Drag & Drop per Long-Press ---- */
+    /* iOS: kein „Kopieren/Nachschlagen“-Menü und keine Text-Selektion beim
+       langen Drücken auf eine Task. Textfelder bleiben ausgenommen. */
+    #habits-list li, #habits-list .habit-row {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #habits-list textarea { -webkit-user-select: text; user-select: text; }
+    /* Overscroll-Bounce/Pull-to-Refresh sollen den Drag nicht stören. */
+    #habits-list { overscroll-behavior: contain; }
+
+    /* Aufnahme-Feedback: anheben + kurzer Highlight-Puls. Muss ohne
+       Vibration klar erkennbar sein (navigator.vibrate gibt es auf iOS
+       nicht – auch nicht im Standalone-Modus). */
+    li.drag-chosen .habit-row {
+      transform: scale(1.03);
+      border-color: rgba(74, 222, 128, 0.45);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(74, 222, 128, 0.3);
+      animation: pickupPulse 0.4s ease;
+    }
+    @keyframes pickupPulse {
+      0% { background: rgba(34, 197, 94, 0.22); }
+      100% { background: rgba(15, 22, 18, 0.6); }
+    }
+    /* Die mitfliegende Kopie unter dem Finger (forceFallback). */
+    li.drag-fallback { opacity: 0.95 !important; list-style: none; }
+    li.drag-fallback .habit-row {
+      transform: scale(1.03);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(74, 222, 128, 0.35);
+    }
+    /* Die Lücke, in die die Task fallen wird. */
+    li.drag-ghost { opacity: 0.4; }
+    li.drag-ghost .habit-row {
+      transform: none;
+      animation: none;
+      border-style: dashed;
+      border-color: rgba(74, 222, 128, 0.5);
+      background: rgba(34, 197, 94, 0.08);
+    }
+    /* Während des Drags: Rest der Liste leicht zurücknehmen, nichts scrollt
+       ausser dem Auto-Scroll (touch-action), Cursor am Desktop. */
+    body.is-dragging { cursor: grabbing; }
+    body.is-dragging #habits-list { touch-action: none; }
+    body.is-dragging #habits-list li:not(.drag-ghost):not(.drag-chosen) .habit-row { opacity: 0.7; }
+
+    /* Sektionswechsel über die Trennlinie: Ziel leuchtet kurz auf. */
+    .drop-flash { animation: dropFlash 0.55s ease; }
+    .section-title.drop-flash { border-radius: 0.5rem; }
+    @keyframes dropFlash {
+      0% { background-color: rgba(34, 197, 94, 0.35); box-shadow: 0 0 16px rgba(74, 222, 128, 0.55); }
+      100% { background-color: transparent; box-shadow: none; }
+    }
+
+    /* Tastatur-Fallback: Zeilen sind fokussierbar, Alt+Pfeil verschiebt. */
+    .habit-row:focus-visible { outline: 2px solid #4ade80; outline-offset: 2px; }
 
     .habit-row { transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.3s ease; }
     .habit-row:active { transform: scale(0.985); }
@@ -399,11 +586,32 @@
       </div>
     </div>
 
-    <!-- Task list -->
-    <ul id="habits-list" class="mb-4 space-y-3"></ul>
-    <div id="empty-state" class="mb-4 hidden rounded-2xl border border-dashed border-white/10 bg-surface-800/40 px-6 py-10 text-center">
-      <p class="text-base font-medium text-slate-300">Nichts offen</p>
-      <p class="mt-1 text-sm text-slate-500">Füg unten deine erste Task für heute hinzu.</p>
+    <!-- Task-Liste: zwei Sektionen in einem Wrapper. Der Wrapper behält die
+         id habits-list – alle Event-Delegationen und querySelector-Aufrufe
+         aus dem Skript laufen unverändert über ihn. Die beiden inneren <ul>
+         sind bewusst dauerhaft im DOM (nie ersetzt, nur ihr Inhalt): daran
+         hängen später die Drag-&-Drop-Instanzen. -->
+    <div id="habits-list" class="mb-4">
+      <section aria-labelledby="prio-title">
+        <h2 id="prio-title" class="section-title section-title-prio">
+          <span aria-hidden="true">★</span> Priorisierte Tasks
+        </h2>
+        <!-- prio-zone: Positionsanker für den Leer-Platzhalter. Die leere
+             Liste selbst bleibt als mindestens 64 px hohe Drop-Zone stehen. -->
+        <div class="prio-zone">
+          <ul id="prio-list" class="space-y-3"></ul>
+          <p id="prio-empty" class="prio-empty">Noch keine priorisierten Tasks – beim Anlegen „Ja, priorisieren“ wählen oder eine Task lange drücken und hochziehen.</p>
+        </div>
+      </section>
+      <div id="section-divider" class="section-divider" aria-hidden="true"></div>
+      <section aria-labelledby="rest-title">
+        <h2 id="rest-title" class="section-title">Weitere Tasks</h2>
+        <ul id="rest-list" class="space-y-3"></ul>
+        <div id="empty-state" class="hidden rounded-2xl border border-dashed border-white/10 bg-surface-800/40 px-6 py-10 text-center">
+          <p class="text-base font-medium text-slate-300">Nichts offen</p>
+          <p class="mt-1 text-sm text-slate-500">Füg unten deine erste Task für heute hinzu.</p>
+        </div>
+      </section>
     </div>
 
     <!-- Add task -->
@@ -646,6 +854,33 @@
     </div>
   </div>
 
+  <!-- Bottom Sheet beim Anlegen: fragt, ob die neue Task priorisiert werden
+       soll. Fährt von unten ein (einhändig erreichbar), Schritt 2 zeigt die
+       echte Prio-Liste mit tippbaren Einfüge-Slots. Backdrop-Tap, Wisch nach
+       unten und Escape verhalten sich wie „Nein, ans Ende“ – die Task wird
+       IMMER angelegt, nie verworfen. -->
+  <div id="add-sheet" class="fixed inset-0 hidden">
+    <div id="add-sheet-backdrop" class="absolute inset-0 bg-black/60 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
+    <div id="add-sheet-panel" class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="add-sheet-title">
+      <div class="sheet-grabber" aria-hidden="true"></div>
+      <div id="add-sheet-steps" class="sheet-steps">
+        <div id="add-sheet-step1" class="sheet-step">
+          <p id="add-sheet-title" class="sheet-title"></p>
+          <p class="sheet-sub">Priorisierte Tasks stehen oben in der Liste und bekommen eine Platznummer.</p>
+          <div class="sheet-actions">
+            <button id="add-sheet-no" type="button" class="sheet-btn sheet-btn-secondary">Nein, ans Ende</button>
+            <button id="add-sheet-yes" type="button" class="sheet-btn sheet-btn-primary">Ja, priorisieren</button>
+          </div>
+        </div>
+        <div id="add-sheet-step2" class="sheet-step" hidden>
+          <p class="sheet-title">Wo einordnen?</p>
+          <p class="sheet-sub">Tippe auf den Platz, an dem die Task stehen soll.</p>
+          <div id="add-sheet-slots" class="sheet-slots"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Celebration -->
   <div id="celebration-overlay"
     class="pointer-events-none fixed inset-0 flex items-center justify-center bg-black/25 opacity-0 backdrop-blur-[2px] transition-opacity duration-500"
@@ -669,6 +904,12 @@
     <span id="toast-text"></span>
     <button id="toast-action" type="button" class="hidden shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent-glow transition hover:bg-accent/25"></button>
   </div>
+
+  <!-- SortableJS (lokal gebündelt, kein CDN zur Laufzeit – offline-fest und
+       ohne Build-Step). Liefert Long-Press-Erkennung, Auto-Scroll und das
+       Sortieren über zwei verbundene Listen. Lädt die Datei nicht (allererster
+       Besuch offline), läuft die App einfach ohne Drag & Drop weiter. -->
+  <script src="./vendor/sortable.min.js"></script>
 
   <script>
   (function () {
@@ -865,6 +1106,120 @@
     }
 
     /* ------------------------------------------------------------
+       Priorisierung & Reihenfolge
+
+       Jede offene Task trägt drei Ordnungsfelder:
+         prioritized – steht die Task in der Prio-Sektion?
+         sortKey     – Sortier-Wert INNERHALB der eigenen Sektion. Bewusst
+                       eine Lückenzahl (1000, 2000, …): Einfügen dazwischen
+                       vergibt den Mittelwert der Nachbarn, es muss also nie
+                       die ganze Liste neu nummeriert werden.
+         sortedAt    – Zeitpunkt (ms) der letzten Einsortierung. Entscheidet
+                       beim Geräte-Abgleich, welche Reihenfolge die jüngere
+                       ist – ohne den Stempel würde ein eingehender älterer
+                       Cloud-Stand eine frische lokale Umsortierung still
+                       überschreiben.
+       Die sichtbare Nummerierung (1, 2, 3 …) wird nirgends gespeichert,
+       sondern beim Rendern aus der Position abgeleitet – sie kann dadurch
+       nie doppelt vergeben sein oder Lücken haben.
+       ------------------------------------------------------------ */
+
+    /** Kleinste erlaubte Lücke zwischen zwei Nachbarn. Darunter stösst
+        wiederholtes Halbieren an die Float-Genauigkeit – dann wird die
+        Sektion einmalig neu verteilt. */
+    const MIN_SORT_GAP = 0.001;
+
+    function bySortKey(a, b) {
+      return (a.sortKey - b.sortKey) || String(a.id).localeCompare(String(b.id));
+    }
+
+    /**
+     * Migration und Absicherung in einem: ergänzt fehlende Ordnungsfelder,
+     * ohne vorhandene anzufassen – idempotent, ein zweiter Durchlauf ändert
+     * nichts mehr. Tasks ohne sortKey (Altbestand, oder von einem Gerät mit
+     * alter App-Version) reihen sich in Array-Reihenfolge hinten in ihrer
+     * Sektion ein; die bisherige Reihenfolge bleibt dadurch erhalten.
+     * sortedAt 0 heisst „nie bewusst einsortiert“ – beim Sync verliert das
+     * gegen jede echte Umsortierung.
+     */
+    function ensureTaskOrder(tasks) {
+      if (!Array.isArray(tasks)) return [];
+      let maxPrio = 0, maxRest = 0;
+      tasks.forEach(function (t) {
+        const k = Number(t && t.sortKey);
+        if (!isFinite(k)) return;
+        if (t.prioritized) { if (k > maxPrio) maxPrio = k; }
+        else if (k > maxRest) maxRest = k;
+      });
+      tasks.forEach(function (t) {
+        if (!t) return;
+        t.prioritized = !!t.prioritized;
+        const k = Number(t.sortKey);
+        if (isFinite(k)) {
+          t.sortKey = k;
+        } else if (t.prioritized) {
+          maxPrio += 1000; t.sortKey = maxPrio;
+        } else {
+          maxRest += 1000; t.sortKey = maxRest;
+        }
+        const s = Number(t.sortedAt);
+        t.sortedAt = (isFinite(s) && s > 0) ? s : 0;
+      });
+      return tasks;
+    }
+
+    /** Offene Tasks einer Sektion, sortiert. excludeId lässt beim
+        Verschieben die bewegte Task selbst aussen vor. */
+    function sectionTasks(prioritized, excludeId) {
+      return state.tasks
+        .filter(function (t) { return t.prioritized === !!prioritized && t.id !== excludeId; })
+        .sort(bySortKey);
+    }
+
+    /** Anzeige-Reihenfolge: erst die Prio-Sektion, dann der Rest. */
+    function orderedTasks() {
+      return sectionTasks(true).concat(sectionTasks(false));
+    }
+
+    /**
+     * sortKey für Position index (0 = ganz oben) innerhalb einer Sektion.
+     * Ganz oben: kleinster Wert − 1000. Ganz unten: grösster + 1000.
+     * Dazwischen: Mittelwert der Nachbarn. Ist deren Lücke bereits kleiner
+     * als MIN_SORT_GAP, wird die Sektion einmalig neu auf 1000er-Schritte
+     * verteilt und der Wert danach erneut bestimmt.
+     */
+    function orderKeyAt(prioritized, index, excludeId) {
+      const list = sectionTasks(prioritized, excludeId);
+      if (!list.length) return 1000;
+      if (index <= 0) return list[0].sortKey - 1000;
+      if (index >= list.length) return list[list.length - 1].sortKey + 1000;
+      const before = list[index - 1].sortKey;
+      const after = list[index].sortKey;
+      if (after - before < MIN_SORT_GAP) {
+        rebalanceSection(prioritized);
+        return orderKeyAt(prioritized, index, excludeId);
+      }
+      return (before + after) / 2;
+    }
+
+    /** Verteilt die sortKeys einer Sektion neu (1000, 2000, …). */
+    function rebalanceSection(prioritized) {
+      const now = Date.now();
+      sectionTasks(prioritized).forEach(function (t, i) {
+        t.sortKey = (i + 1) * 1000;
+        t.sortedAt = now;
+      });
+    }
+
+    /** Setzt eine Task an Position index ihrer (neuen) Sektion und stempelt
+        sortedAt. Speichert und rendert bewusst nicht selbst. */
+    function placeTask(task, prioritized, index) {
+      task.sortKey = orderKeyAt(prioritized, index, task.id);
+      task.prioritized = !!prioritized;
+      task.sortedAt = Date.now();
+    }
+
+    /* ------------------------------------------------------------
        Wieder geöffnete Aufgaben
 
        Den Journal-Eintrag einfach zu löschen genügt nicht: beim Sync werden
@@ -919,7 +1274,12 @@
      * normalizeTaskText(). Für Altbestand ändert das nichts: die alten
      * Einträge waren durch maxlength="120" ohnehin kurz und einzeilig,
      * gekappt wird erst ab TASK_MAX (2000). Ein eigener Migrationsschritt
-     * ist deshalb nicht nötig – das Datenmodell bleibt { id, name, createdAt }.
+     * ist deshalb nicht nötig.
+     *
+     * Seit der Priorisierung trägt jede offene Task zusätzlich die
+     * Ordnungsfelder prioritized/sortKey/sortedAt. Altbestand ohne diese
+     * Felder wird am Ende von ensureTaskOrder() ergänzt – in bisheriger
+     * Reihenfolge, unpriorisiert, idempotent.
      */
     function normalize(raw) {
       const base = emptyState();
@@ -957,9 +1317,16 @@
             createdAt: createdAt,
           }));
         } else {
-          base.tasks.push(carryNote(t, { id: (t && t.id) || newId(), name: name, createdAt: createdAt }));
+          const open = carryNote(t, { id: (t && t.id) || newId(), name: name, createdAt: createdAt });
+          // Ordnungsfelder unverändert mitnehmen – fehlen sie (Altbestand),
+          // ergänzt ensureTaskOrder() sie unten in bisheriger Reihenfolge.
+          if (t && typeof t.prioritized !== 'undefined') open.prioritized = t.prioritized;
+          if (t && typeof t.sortKey !== 'undefined') open.sortKey = t.sortKey;
+          if (t && typeof t.sortedAt !== 'undefined') open.sortedAt = t.sortedAt;
+          base.tasks.push(open);
         }
       });
+      ensureTaskOrder(base.tasks);
 
       base.day = fallbackDay;
       base.celebrationsToday = Number(raw.celebrationsToday) || 0;
@@ -1034,6 +1401,11 @@
       streakCount: document.getElementById('streak-count'),
       streakLabel: document.getElementById('streak-label'),
       list: document.getElementById('habits-list'),
+      prioList: document.getElementById('prio-list'),
+      restList: document.getElementById('rest-list'),
+      prioTitle: document.getElementById('prio-title'),
+      restTitle: document.getElementById('rest-title'),
+      sectionDivider: document.getElementById('section-divider'),
       emptyState: document.getElementById('empty-state'),
       showAddBtn: document.getElementById('show-add-habit-btn'),
       addForm: document.getElementById('add-habit-form'),
@@ -1097,6 +1469,16 @@
       noteMeta: document.getElementById('note-meta'),
       noteSave: document.getElementById('note-save'),
       noteCancel: document.getElementById('note-cancel'),
+      addSheet: document.getElementById('add-sheet'),
+      addSheetBackdrop: document.getElementById('add-sheet-backdrop'),
+      addSheetPanel: document.getElementById('add-sheet-panel'),
+      addSheetSteps: document.getElementById('add-sheet-steps'),
+      addSheetStep1: document.getElementById('add-sheet-step1'),
+      addSheetStep2: document.getElementById('add-sheet-step2'),
+      addSheetTitle: document.getElementById('add-sheet-title'),
+      addSheetSlots: document.getElementById('add-sheet-slots'),
+      addSheetNo: document.getElementById('add-sheet-no'),
+      addSheetYes: document.getElementById('add-sheet-yes'),
       toast: document.getElementById('toast'),
       toastText: document.getElementById('toast-text'),
       toastAction: document.getElementById('toast-action'),
@@ -1111,6 +1493,11 @@
     let editingId = null;
     let freshIds = new Set();
     let firstRender = true;
+    // Aktiver Long-Press-Drag: solange er läuft, wird nicht gerendert und
+    // eingehende Sync-Stände werden gepuffert – sonst spränge die gezogene
+    // Task aus dem Finger.
+    let dragActive = false;
+    let pendingSyncPayload = null;
     // Welche langen Texte gerade ausgeklappt sind. Reine Ansichtssache –
     // wird bewusst nicht gespeichert, beim nächsten Start ist wieder alles
     // ordentlich zusammengeklappt.
@@ -1268,7 +1655,7 @@
     let toastTimer = null;
     let toastHandler = null;
 
-    function showToast(message, actionLabel, onAction) {
+    function showToast(message, actionLabel, onAction, duration) {
       el.toastText.textContent = message;
       if (actionLabel) {
         el.toastAction.textContent = actionLabel;
@@ -1283,7 +1670,7 @@
       el.toast.classList.remove('opacity-0', 'translate-y-4');
       el.toast.classList.add('opacity-100', 'translate-y-0');
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 2800);
+      toastTimer = setTimeout(hideToast, duration || (actionLabel ? 6000 : 2800));
     }
 
     function hideToast() {
@@ -1434,9 +1821,17 @@
       '</button>';
     }
 
-    function taskRow(task, index) {
+    /**
+     * Eine Zeile der offenen Liste. opts steuert die Prio-Darstellung:
+     *   opts.number – Platznummer in der Prio-Sektion (1-basiert). Sie wird
+     *   hier aus der Render-Position abgeleitet und nirgends gespeichert –
+     *   nach Löschen/Abhaken/Verschieben stimmt sie dadurch immer von selbst.
+     */
+    function taskRow(task, index, opts) {
+      opts = opts || {};
       const isEditing = editingId === task.id;
       const enter = firstRender || freshIds.has(task.id);
+      const hot = !!opts.number && opts.number <= 3;   // Top 3 hervorgehoben
       // Mehrzeilige und lange Texte oben ausrichten – bei kurzen bleibt es
       // bei der vertikalen Mitte, damit einzeilige Zeilen aussehen wie bisher.
       const tall = task.name.indexOf('\n') !== -1 || task.name.length > 60;
@@ -1444,10 +1839,14 @@
       const rowClasses = [
         'habit-row ' + rowShape + ' rounded-2xl border bg-surface-800/60 px-3 py-4 shadow-card backdrop-blur-sm sm:gap-3 sm:px-4',
         isEditing ? 'border-accent/30 ring-1 ring-accent/20' : 'border-white/5 hover:border-accent/20 hover:bg-surface-700/50',
+        (!isEditing && hot) ? 'prio-top' : '',
       ].join(' ');
+      const numberBadge = (!isEditing && opts.number)
+        ? '<span class="prio-num ' + (hot ? 'prio-num-hot' : 'prio-num-soft') + '" aria-hidden="true">' + opts.number + '</span>'
+        : '';
 
       if (isEditing) {
-        return '<li>' +
+        return '<li data-id="' + task.id + '">' +
           '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
             '<textarea class="task-edit-input task-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
               'data-id="' + task.id + '" rows="1" maxlength="2000" enterkeyhint="enter" aria-label="Task bearbeiten">' + escapeHtml(task.name) + '</textarea>' +
@@ -1461,8 +1860,10 @@
       }
 
       const expanded = expandedIds.has(task.id);
-      return '<li class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
-        '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
+      return '<li data-id="' + task.id + '" class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
+        // tabindex: Zeile fokussierbar für den Tastatur-Fallback (Alt+Pfeil).
+        '<div class="' + rowClasses + '" data-id="' + task.id + '" tabindex="0">' +
+          numberBadge +
           '<span class="flex shrink-0 items-center' + (tall ? '' : ' self-center') + '">' +
             '<input type="checkbox" class="habit-checkbox m-0 block" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
               'aria-label="' + escapeHtml(shortText(task.name)) + ' abhaken" />' +
@@ -1490,9 +1891,52 @@
       '</li>';
     }
 
+    /**
+     * FLIP-Animation für die Liste: vor dem Neuaufbau die Position jeder
+     * Zeile merken, danach von der alten zur neuen Position gleiten lassen
+     * (ca. 180 ms). So „rutscht“ beim Einfügen alles Darunterliegende
+     * sichtbar eine Position weiter, statt zu springen. Neue Zeilen (ohne
+     * alte Position) behalten ihre row-enter-Einblendung.
+     */
+    function captureRowRects() {
+      if (reduceMotion || firstRender) return null;
+      const m = new Map();
+      el.list.querySelectorAll('li[data-id]').forEach(function (li) {
+        m.set(li.dataset.id, li.getBoundingClientRect().top);
+      });
+      return m.size ? m : null;
+    }
+
+    function playRowReflow(before) {
+      if (!before) return;
+      el.list.querySelectorAll('li[data-id]').forEach(function (li) {
+        const prev = before.get(li.dataset.id);
+        if (prev === undefined) return;
+        const dy = prev - li.getBoundingClientRect().top;
+        if (Math.abs(dy) < 2) return;
+        li.style.transition = 'none';
+        li.style.transform = 'translateY(' + dy + 'px)';
+        requestAnimationFrame(function () {
+          li.style.transition = 'transform 180ms ease';
+          li.style.transform = '';
+          setTimeout(function () { li.style.transition = ''; }, 240);
+        });
+      });
+    }
+
     function renderList() {
+      // Nicht die rohe Array-Reihenfolge, sondern nach Sektion + sortKey –
+      // die Array-Reihenfolge kann nach einem Geräte-Merge beliebig sein.
+      const before = captureRowRects();
+      const prio = sectionTasks(true);
+      const rest = sectionTasks(false);
+      el.prioList.innerHTML = prio.map(function (t, i) {
+        return taskRow(t, i, { number: i + 1 });
+      }).join('');
+      el.restList.innerHTML = rest.map(function (t, i) {
+        return taskRow(t, i + prio.length, {});
+      }).join('');
       const tasks = state.tasks;
-      el.list.innerHTML = tasks.map(taskRow).join('');
       el.emptyState.classList.toggle('hidden', tasks.length > 0);
 
       if (tasks.length === 0) {
@@ -1509,6 +1953,7 @@
 
       freshIds.clear();
       firstRender = false;
+      playRowReflow(before);
       updateExpandButtons(el.list);
 
       if (editingId) {
@@ -1527,10 +1972,16 @@
     });
 
     function render() {
+      // Während eines aktiven Drags niemals rendern – nach dem Drop wird
+      // genau einmal gerendert (onEnd).
+      if (dragActive) return;
       applyIdentity();
       renderStats();
       renderList();
       renderHistory();
+      // Offene Slot-Auswahl aktuell halten, falls z. B. ein Sync-Update
+      // die Prio-Liste verändert, während das Sheet offen ist.
+      if (sheetOpen && !el.addSheetStep2.hidden) renderSheetSlots();
     }
 
     /* ============================================================
@@ -1627,21 +2078,177 @@
       else expandedIds.add(id);
     }
 
-    function addTask(name) {
+    /* ------------------------------------------------------------
+       Anlegen mit Prio-Abfrage (Bottom Sheet)
+
+       requestAdd() prüft den Text und öffnet das Sheet. Angelegt wird die
+       Task ausschliesslich in commitPendingAdd() – und JEDER Weg aus dem
+       Sheet (Nein, Backdrop, Wisch nach unten, Escape, pagehide) führt
+       dorthin. Eine eingetippte Task kann also nicht verlorengehen, nur
+       weil das Sheet weggetippt wurde.
+       ------------------------------------------------------------ */
+    let sheetOpen = false;
+    let pendingAddText = null;
+
+    function requestAdd(name) {
       const clean = normalizeTaskText(name);
       if (!clean) {
         el.newInput.focus();
         showToast('Gib der Task noch einen Text.');
         return false;
       }
-      const task = { id: newId(), name: clean, createdAt: todayKey() };
+      openAddSheet(clean);
+      return true;
+    }
+
+    /** Legt die wartende Task endgültig an. prioritized=false → ans Ende der
+        normalen Liste; sonst an Position index der Prio-Sektion. */
+    function commitPendingAdd(prioritized, index) {
+      const text = pendingAddText;
+      pendingAddText = null;
+      if (text == null) return;                    // schon angelegt (Doppel-Tap)
+      const task = { id: newId(), name: text, createdAt: todayKey() };
+      placeTask(task, !!prioritized, prioritized ? index : Infinity);
       freshIds.add(task.id);
       state.tasks.push(task);
       save();
       render();
-      showToast('„' + shortText(clean) + '“ hinzugefügt');
-      return true;
+      el.newInput.value = '';
+      autoGrow(el.newInput);
+
+      let message;
+      if (prioritized) {
+        const rank = sectionTasks(true).findIndex(function (t) { return t.id === task.id; }) + 1;
+        message = '„' + shortText(text) + '“ auf Platz ' + rank;
+      } else {
+        message = '„' + shortText(text) + '“ hinzugefügt';
+      }
+      // ~4 s Zeit für Rückgängig, falls man sich vertippt hat.
+      showToast(message, 'Rückgängig', function () {
+        const i = indexOfTask(task.id);
+        if (i !== -1) { state.tasks.splice(i, 1); save(); render(); }
+      }, 4200);
+      closeAddSheet();
     }
+
+    function openAddSheet(text) {
+      pendingAddText = text;
+      sheetOpen = true;
+      el.addSheetTitle.textContent = '„' + shortText(text) + '“ priorisieren?';
+      el.addSheetStep2.hidden = true;
+      el.addSheetStep1.hidden = false;
+      el.addSheetPanel.style.transform = '';
+      el.addSheet.classList.remove('hidden');
+      el.newInput.blur();                          // iOS-Tastatur einklappen
+      requestAnimationFrame(function () {
+        el.addSheetBackdrop.classList.remove('opacity-0');
+        el.addSheetPanel.classList.add('sheet-open');
+      });
+    }
+
+    function closeAddSheet() {
+      if (!sheetOpen) return;
+      sheetOpen = false;
+      el.addSheetBackdrop.classList.add('opacity-0');
+      el.addSheetPanel.classList.remove('sheet-open');
+      el.addSheetPanel.style.transform = '';
+      setTimeout(function () { if (!sheetOpen) el.addSheet.classList.add('hidden'); }, 350);
+    }
+
+    /** Backdrop, Wisch nach unten, Escape: wie „Nein, ans Ende“. */
+    function dismissAddSheet() {
+      commitPendingAdd(false);
+    }
+
+    /** Schritt 2: die echte Prio-Liste mit n+1 tippbaren Einfüge-Slots. */
+    function renderSheetSlots() {
+      const prio = sectionTasks(true);
+      let html = '';
+      for (let i = 0; i <= prio.length; i++) {
+        html += '<button type="button" class="slot-btn" data-slot="' + i + '"><span>Platz ' + (i + 1) + '</span></button>';
+        if (i < prio.length) {
+          html += '<div class="slot-task">' +
+            '<span class="prio-num ' + (i < 3 ? 'prio-num-hot' : 'prio-num-soft') + '" aria-hidden="true">' + (i + 1) + '</span>' +
+            '<span class="slot-task-name">' + escapeHtml(shortText(prio[i].name)) + '</span>' +
+          '</div>';
+        }
+      }
+      el.addSheetSlots.innerHTML = html;
+    }
+
+    /** Wechsel zwischen den Sheet-Schritten: Inhalt gleitet seitlich, die
+        Höhe des Panels animiert mit, statt zu springen. */
+    function showSheetStep(step) {
+      const showEl = step === 2 ? el.addSheetStep2 : el.addSheetStep1;
+      const hideEl = step === 2 ? el.addSheetStep1 : el.addSheetStep2;
+      if (step === 2) renderSheetSlots();
+      if (!showEl.hidden && hideEl.hidden) return;
+      if (reduceMotion) { hideEl.hidden = true; showEl.hidden = false; return; }
+      const steps = el.addSheetSteps;
+      const fromHeight = steps.offsetHeight;
+      hideEl.hidden = true;
+      showEl.hidden = false;
+      showEl.classList.add(step === 2 ? 'step-enter-right' : 'step-enter-left');
+      steps.style.height = fromHeight + 'px';
+      steps.style.overflow = 'hidden';
+      const toHeight = showEl.offsetHeight;
+      requestAnimationFrame(function () {
+        steps.style.transition = 'height 0.28s ease';
+        steps.style.height = toHeight + 'px';
+        showEl.classList.remove('step-enter-right', 'step-enter-left');
+      });
+      setTimeout(function () {
+        steps.style.height = '';
+        steps.style.transition = '';
+        steps.style.overflow = '';
+      }, 320);
+    }
+
+    el.addSheetNo.addEventListener('click', function () { commitPendingAdd(false); });
+    el.addSheetYes.addEventListener('click', function () { showSheetStep(2); });
+    el.addSheetSlots.addEventListener('click', function (e) {
+      const btn = e.target.closest('.slot-btn');
+      if (!btn) return;
+      commitPendingAdd(true, Number(btn.dataset.slot));
+    });
+    el.addSheet.addEventListener('click', function (e) {
+      if (!el.addSheetPanel.contains(e.target)) dismissAddSheet();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && sheetOpen) { e.preventDefault(); dismissAddSheet(); }
+    });
+
+    /* Wisch nach unten schliesst das Sheet (= „Nein“). Pointer Events, damit
+       Maus und Touch denselben Weg gehen. Innerhalb der Slot-Liste hat das
+       normale Scrollen Vorrang (touch-action: pan-y dort). */
+    let sheetPointer = null;
+    el.addSheetPanel.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('.sheet-slots')) return;
+      sheetPointer = { id: e.pointerId, y: e.clientY, dy: 0, dragging: false };
+    });
+    el.addSheetPanel.addEventListener('pointermove', function (e) {
+      if (!sheetPointer || e.pointerId !== sheetPointer.id) return;
+      const dy = e.clientY - sheetPointer.y;
+      if (!sheetPointer.dragging) {
+        if (dy < 12) return;
+        sheetPointer.dragging = true;
+        try { el.addSheetPanel.setPointerCapture(e.pointerId); } catch (err) {}
+        el.addSheetPanel.style.transition = 'none';
+      }
+      sheetPointer.dy = Math.max(0, dy);
+      el.addSheetPanel.style.transform = 'translateY(' + sheetPointer.dy + 'px)';
+    });
+    function endSheetPointer(e) {
+      if (!sheetPointer || e.pointerId !== sheetPointer.id) return;
+      const p = sheetPointer;
+      sheetPointer = null;
+      el.addSheetPanel.style.transition = '';
+      if (!p.dragging) return;
+      if (p.dy > 90) dismissAddSheet();
+      else el.addSheetPanel.style.transform = '';
+    }
+    el.addSheetPanel.addEventListener('pointerup', endSheetPointer);
+    el.addSheetPanel.addEventListener('pointercancel', endSheetPointer);
 
     /** Position einer Task in der Liste, frisch ermittelt statt gemerkt. */
     function indexOfTask(id) {
@@ -1735,6 +2342,7 @@
           name: entry.name,
           createdAt: entry.createdAt || entry.date,
         });
+        placeTask(task, false, Infinity);    // unpriorisiert ans Ende
         state.tasks.push(task);
         freshIds.add(task.id);
       }
@@ -1917,6 +2525,190 @@
       if (e.target.classList.contains('task-edit-input')) autoGrow(e.target);
     });
 
+    /**
+     * Tastatur-Fallback zum Umsortieren: Alt + Pfeil hoch/runter verschiebt
+     * die fokussierte Task um eine Position. Am Sektionsrand wechselt sie
+     * zuerst die Sektion (gleiche Regeln wie beim Ziehen über die
+     * Trennlinie), der Fokus bleibt auf der Zeile.
+     */
+    function moveTaskBy(id, delta) {
+      const task = state.tasks.find(function (t) { return t.id === id; });
+      if (!task) return;
+      const list = sectionTasks(task.prioritized);
+      const idx = list.findIndex(function (t) { return t.id === id; });
+      if (delta > 0 && idx === list.length - 1) {
+        if (!task.prioritized) return;               // schon ganz unten
+        placeTask(task, false, 0);                   // über die Trennlinie nach unten
+      } else if (delta < 0 && idx === 0) {
+        if (task.prioritized) return;                // schon ganz oben
+        placeTask(task, true, Infinity);             // über die Trennlinie nach oben
+      } else {
+        // innerhalb der Sektion: vor den oberen bzw. hinter den unteren
+        // Nachbarn (Index bezieht sich auf die Liste OHNE die Task selbst).
+        placeTask(task, task.prioritized, delta > 0 ? idx + 1 : idx - 1);
+      }
+      save();
+      render();
+      const row = el.list.querySelector('.habit-row[data-id="' + id + '"]');
+      if (row) row.focus();
+    }
+
+    el.list.addEventListener('keydown', function (e) {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      if (e.target.classList && e.target.classList.contains('task-edit-input')) return;
+      const row = e.target.closest ? e.target.closest('.habit-row[data-id]') : null;
+      if (!row) return;
+      e.preventDefault();
+      moveTaskBy(row.dataset.id, e.key === 'ArrowDown' ? 1 : -1);
+    });
+
+    /* ============================================================
+       11b. Drag & Drop per Long-Press (SortableJS, lokal gebündelt)
+
+       Zwei verbundene Listen (group), delay 400 ms mit delayOnTouchOnly:
+       kurzes Wischen scrollt normal weiter, erst Halten nimmt die Task auf.
+       touchStartThreshold bricht den Long-Press ab, wenn sich der Finger
+       vorher mehr als ~10 px bewegt. forceFallback sorgt für identisches
+       Verhalten auf iOS (kein natives HTML5-DnD), Auto-Scroll ist einge-
+       baut. Nach dem Drop wird der Zustand aus dem Sortable-Ergebnis
+       aktualisiert und GENAU EINMAL neu gerendert.
+       ============================================================ */
+
+    /**
+     * Haptik ist reine Zugabe: navigator.vibrate existiert auf iOS nicht
+     * (Feature-Detection, greift z. B. auf Android). Zusätzlich der
+     * inoffizielle iOS-Trick über ein verstecktes <input type="checkbox"
+     * switch>, dessen Umschalten auf neueren Versionen haptisches Feedback
+     * auslöst – kann jederzeit brechen und darf deshalb nie Voraussetzung
+     * sein: schlägt alles fehl, passiert einfach nichts.
+     */
+    let hapticSwitch = null;
+    function tryHaptic() {
+      try {
+        if (navigator.vibrate) { navigator.vibrate(10); return; }
+        if (!hapticSwitch) {
+          hapticSwitch = document.createElement('input');
+          hapticSwitch.type = 'checkbox';
+          hapticSwitch.setAttribute('switch', '');
+          hapticSwitch.setAttribute('aria-hidden', 'true');
+          hapticSwitch.tabIndex = -1;
+          hapticSwitch.style.cssText = 'position:fixed;left:-100px;width:1px;height:1px;opacity:0;pointer-events:none';
+          document.body.appendChild(hapticSwitch);
+        }
+        hapticSwitch.click();
+      } catch (e) {/* reine Zugabe */}
+    }
+
+    /** Ziel-Sektion (Titel) und Trennlinie kurz aufleuchten lassen, wenn die
+        Task über die Trennlinie in die andere Sektion gezogen wird. */
+    function flashDropTarget(toEl) {
+      [el.sectionDivider, toEl === el.prioList ? el.prioTitle : el.restTitle].forEach(function (node) {
+        if (!node) return;
+        node.classList.remove('drop-flash');
+        void node.offsetWidth;               // Animation neu anstossen
+        node.classList.add('drop-flash');
+      });
+    }
+
+    /**
+     * Wendet einen während des Drags gepufferten Sync-Stand nach dem Drop
+     * an. Die Ordnungsfelder gerade umsortierter Tasks (jüngeres sortedAt)
+     * bleiben dabei erhalten – dieselbe Regel wie im Geräte-Merge, sonst
+     * würde der soeben ausgeführte Drop vom älteren Stand überschrieben.
+     */
+    function flushPendingSync() {
+      const p = pendingSyncPayload;
+      pendingSyncPayload = null;
+      if (!p) return false;
+      if (Array.isArray(p.tasks)) {
+        const localById = new Map();
+        state.tasks.forEach(function (t) { localById.set(t.id, t); });
+        p.tasks = p.tasks.map(function (t) {
+          const l = t && localById.get(t.id);
+          if (l && (Number(l.sortedAt) || 0) > (Number(t && t.sortedAt) || 0)) {
+            return Object.assign({}, t, { prioritized: l.prioritized, sortKey: l.sortKey, sortedAt: l.sortedAt });
+          }
+          return t;
+        });
+      }
+      applySyncPayload(p);                   // rendert selbst
+      return true;
+    }
+
+    function finishDrag(evt) {
+      document.body.classList.remove('is-dragging');
+      if (!dragActive) return;
+      dragActive = false;
+
+      const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
+      const task = id ? state.tasks.find(function (t) { return t.id === id; }) : null;
+      if (task && evt.to) {
+        const toPrio = evt.to === el.prioList;
+        // newIndex zählt die Position in der Ziel-Liste; ohne die bewegte
+        // Task selbst ist das genau der Einfüge-Index für orderKeyAt().
+        placeTask(task, toPrio, evt.newIndex);
+        save();                              // ein Zustands-Write, debounced in die Cloud
+      }
+      // Genau EIN Render nach dem Drop – mit dem gepufferten Sync-Stand,
+      // falls währenddessen einer eingetroffen ist.
+      if (!flushPendingSync()) render();
+    }
+
+    function initDrag() {
+      if (!window.Sortable) return;          // Datei (noch) nicht da: App läuft ohne Drag weiter
+      let lastDragTarget = null;
+      const options = {
+        group: 'tasks',
+        animation: reduceMotion ? 0 : 180,   // andere Tasks weichen animiert aus
+        delay: 400,                          // Long-Press
+        delayOnTouchOnly: true,              // Maus zieht sofort
+        touchStartThreshold: 10,             // >10 px vor Ablauf → Abbruch, normales Scrollen
+        forceFallback: true,
+        fallbackOnBody: true,
+        fallbackTolerance: 4,
+        ghostClass: 'drag-ghost',
+        chosenClass: 'drag-chosen',
+        fallbackClass: 'drag-fallback',
+        // Bedienelemente starten keinen Drag, verhalten sich aber normal.
+        filter: 'button, input, textarea, a, [data-action]',
+        preventOnFilter: false,
+        scroll: true,                        // Auto-Scroll nahe am Rand
+        scrollSensitivity: 90,
+        scrollSpeed: 12,
+        bubbleScroll: true,
+        onChoose: function (evt) {
+          // Touch: Aufnahme nach 400 ms Halten – ab hier deutliches Feedback.
+          // Maus: kein Delay, das Feedback kommt erst beim echten Drag-Start,
+          // sonst flackert jeder simple Klick auf eine Zeile.
+          const oe = evt.originalEvent || {};
+          if (oe.pointerType === 'touch' || oe.touches) {
+            document.body.classList.add('is-dragging');
+            tryHaptic();
+          }
+        },
+        onUnchoose: function () {
+          if (!dragActive) document.body.classList.remove('is-dragging');
+        },
+        onStart: function (evt) {
+          dragActive = true;
+          lastDragTarget = evt.from;
+          document.body.classList.add('is-dragging');
+        },
+        onMove: function (evt) {
+          if (evt.to && evt.to !== lastDragTarget) {
+            lastDragTarget = evt.to;
+            flashDropTarget(evt.to);         // Sektionswechsel sichtbar machen
+          }
+        },
+        onEnd: finishDrag,
+      };
+      try {
+        new Sortable(el.prioList, options);
+        new Sortable(el.restList, options);
+      } catch (e) {/* ohne Drag & Drop bleibt alles andere benutzbar */}
+    }
+    initDrag();
+
     function showAddForm() {
       el.showAddBtn.classList.add('hidden');
       el.addForm.classList.remove('hidden');
@@ -1935,11 +2727,7 @@
     el.showAddBtn.addEventListener('click', showAddForm);
     el.cancelAdd.addEventListener('click', hideAddForm);
     el.confirmAdd.addEventListener('click', function () {
-      if (addTask(el.newInput.value)) {
-        el.newInput.value = '';
-        autoGrow(el.newInput);
-        el.newInput.focus();
-      }
+      requestAdd(el.newInput.value);   // Eingabe leert commitPendingAdd()
     });
     el.newInput.addEventListener('input', function () { autoGrow(el.newInput); });
     /* Gleiche Regel wie beim Bearbeiten: Enter macht eine neue Zeile,
@@ -1947,10 +2735,7 @@
     el.newInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        if (addTask(el.newInput.value)) {
-          el.newInput.value = '';
-          autoGrow(el.newInput);
-        }
+        requestAdd(el.newInput.value);
       }
       if (e.key === 'Escape') hideAddForm();
     });
@@ -2677,7 +3462,12 @@
     // zurück und verhindert so eine Endlosschleife.
     function applySyncPayload(payload) {
       if (!payload || typeof payload !== 'object') return;
-      if (Array.isArray(payload.tasks)) state.tasks = payload.tasks;
+      // Während eines aktiven Drags puffern – flushPendingSync() wendet den
+      // Stand nach dem Drop an, sonst springt die Task aus dem Finger.
+      if (dragActive) { pendingSyncPayload = payload; return; }
+      // ensureTaskOrder: ein Cloud-Stand von einem Gerät mit alter
+      // App-Version kann Tasks ohne Ordnungsfelder enthalten.
+      if (Array.isArray(payload.tasks)) state.tasks = ensureTaskOrder(payload.tasks);
       if (Array.isArray(payload.journal)) state.journal = payload.journal;
       state.reopened = sanitizeReopened(payload.reopened);
       if (payload.history && typeof payload.history === 'object') state.history = payload.history;
@@ -2934,7 +3724,12 @@
     });
     window.addEventListener('focus', checkDayChange);
     setInterval(checkDayChange, 60000);
-    window.addEventListener('pagehide', flushSave);
+    window.addEventListener('pagehide', function () {
+      // Wird die App mit offenem Sheet weggewischt, gilt „Nein, ans Ende“ –
+      // die eingetippte Task geht nicht verloren.
+      if (pendingAddText != null) commitPendingAdd(false);
+      flushSave();
+    });
 
     // null = noch nicht ermittelt. Wird einmal beim Start bestimmt und dann
     // wiederverwendet, damit ein erneutes Öffnen der Einstellungen nicht jedes
@@ -3187,6 +3982,26 @@
       return map;
     }
 
+    /* Ordnungsfelder (prioritized/sortKey/sortedAt): pro Task gewinnt die
+       Seite mit dem JÜNGEREN sortedAt – unabhängig davon, wessen Task-Objekt
+       inhaltlich (Text, Anmerkung) übernommen wird. Ohne diesen Abgleich
+       würde „bei offenen Tasks gewinnt die Cloud“ eine frische lokale
+       Umsortierung durch einen älteren Cloud-Stand still überschreiben. */
+    function orderStamp(t) {
+      const s = Number(t && t.sortedAt);
+      return isFinite(s) && s > 0 ? s : 0;
+    }
+    function withNewerOrder(winner, other) {
+      if (!other || orderStamp(other) <= orderStamp(winner)) return winner;
+      const k = Number(other.sortKey);
+      if (!isFinite(k)) return winner;
+      const out = Object.assign({}, winner);
+      out.prioritized = !!other.prioritized;
+      out.sortKey = k;
+      out.sortedAt = orderStamp(other);
+      return out;
+    }
+
     // Wieder geöffnete Aufgaben: je id gilt der jüngere Zeitpunkt.
     function mergeReopened(a, b) {
       const out = {};
@@ -3232,7 +4047,11 @@
       const done = new Set(journal.map(function (e) { return e.id; }));
       const tm = new Map();
       (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
-      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      // Inhaltlich gewinnt beim Erstabgleich die lokale Fassung – die
+      // Reihenfolge aber die Seite mit dem jüngeren sortedAt.
+      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
+        if (t && t.id) tm.set(t.id, withNewerOrder(t, tm.get(t.id)));
+      });
       const tasks = Array.from(tm.values()).filter(function (t) { return !done.has(t.id); });
       return {
         tasks: tasks,
@@ -3250,8 +4069,15 @@
       const reopened = mergeReopened(remote.reopened, local.reopened);
       const journal = unionJournal(remote.journal, local.journal, reopened);
       const done = new Set(journal.map(function (e) { return e.id; }));
+      const lm = new Map();
+      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) { if (t && t.id) lm.set(t.id, t); });
       const tm = new Map();
-      (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      // Inhaltlich gewinnt die Cloud – die Reihenfolge aber die Seite mit
+      // dem jüngeren sortedAt: eine gerade gemachte lokale Umsortierung
+      // darf ein (älterer) eintreffender Cloud-Stand nicht überschreiben.
+      (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) {
+        if (t && t.id) tm.set(t.id, withNewerOrder(t, lm.get(t.id)));
+      });
       (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
         if (t && t.id && !tm.has(t.id) && recentlyReopened(local.reopened, t.id)) tm.set(t.id, t);
       });

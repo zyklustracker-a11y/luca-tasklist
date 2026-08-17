@@ -1,12 +1,13 @@
 /* Service Worker – macht die App offline nutzbar.
    Bei Änderungen an den Dateien: CACHE_VERSION hochzählen. */
-const CACHE_VERSION = 'v18';
+const CACHE_VERSION = 'v19';
 const CACHE_NAME = 'task-tracker-' + CACHE_VERSION;
 
 const PRECACHE = [
   './',
   './index.html',
   './tailwind.css?v=12',
+  './vendor/sortable.min.js',
   './manifest.webmanifest',
   './favicon-32.png',
   './apple-touch-icon.png',
