@@ -865,6 +865,120 @@
     }
 
     /* ------------------------------------------------------------
+       Priorisierung & Reihenfolge
+
+       Jede offene Task trägt drei Ordnungsfelder:
+         prioritized – steht die Task in der Prio-Sektion?
+         sortKey     – Sortier-Wert INNERHALB der eigenen Sektion. Bewusst
+                       eine Lückenzahl (1000, 2000, …): Einfügen dazwischen
+                       vergibt den Mittelwert der Nachbarn, es muss also nie
+                       die ganze Liste neu nummeriert werden.
+         sortedAt    – Zeitpunkt (ms) der letzten Einsortierung. Entscheidet
+                       beim Geräte-Abgleich, welche Reihenfolge die jüngere
+                       ist – ohne den Stempel würde ein eingehender älterer
+                       Cloud-Stand eine frische lokale Umsortierung still
+                       überschreiben.
+       Die sichtbare Nummerierung (1, 2, 3 …) wird nirgends gespeichert,
+       sondern beim Rendern aus der Position abgeleitet – sie kann dadurch
+       nie doppelt vergeben sein oder Lücken haben.
+       ------------------------------------------------------------ */
+
+    /** Kleinste erlaubte Lücke zwischen zwei Nachbarn. Darunter stösst
+        wiederholtes Halbieren an die Float-Genauigkeit – dann wird die
+        Sektion einmalig neu verteilt. */
+    const MIN_SORT_GAP = 0.001;
+
+    function bySortKey(a, b) {
+      return (a.sortKey - b.sortKey) || String(a.id).localeCompare(String(b.id));
+    }
+
+    /**
+     * Migration und Absicherung in einem: ergänzt fehlende Ordnungsfelder,
+     * ohne vorhandene anzufassen – idempotent, ein zweiter Durchlauf ändert
+     * nichts mehr. Tasks ohne sortKey (Altbestand, oder von einem Gerät mit
+     * alter App-Version) reihen sich in Array-Reihenfolge hinten in ihrer
+     * Sektion ein; die bisherige Reihenfolge bleibt dadurch erhalten.
+     * sortedAt 0 heisst „nie bewusst einsortiert“ – beim Sync verliert das
+     * gegen jede echte Umsortierung.
+     */
+    function ensureTaskOrder(tasks) {
+      if (!Array.isArray(tasks)) return [];
+      let maxPrio = 0, maxRest = 0;
+      tasks.forEach(function (t) {
+        const k = Number(t && t.sortKey);
+        if (!isFinite(k)) return;
+        if (t.prioritized) { if (k > maxPrio) maxPrio = k; }
+        else if (k > maxRest) maxRest = k;
+      });
+      tasks.forEach(function (t) {
+        if (!t) return;
+        t.prioritized = !!t.prioritized;
+        const k = Number(t.sortKey);
+        if (isFinite(k)) {
+          t.sortKey = k;
+        } else if (t.prioritized) {
+          maxPrio += 1000; t.sortKey = maxPrio;
+        } else {
+          maxRest += 1000; t.sortKey = maxRest;
+        }
+        const s = Number(t.sortedAt);
+        t.sortedAt = (isFinite(s) && s > 0) ? s : 0;
+      });
+      return tasks;
+    }
+
+    /** Offene Tasks einer Sektion, sortiert. excludeId lässt beim
+        Verschieben die bewegte Task selbst aussen vor. */
+    function sectionTasks(prioritized, excludeId) {
+      return state.tasks
+        .filter(function (t) { return t.prioritized === !!prioritized && t.id !== excludeId; })
+        .sort(bySortKey);
+    }
+
+    /** Anzeige-Reihenfolge: erst die Prio-Sektion, dann der Rest. */
+    function orderedTasks() {
+      return sectionTasks(true).concat(sectionTasks(false));
+    }
+
+    /**
+     * sortKey für Position index (0 = ganz oben) innerhalb einer Sektion.
+     * Ganz oben: kleinster Wert − 1000. Ganz unten: grösster + 1000.
+     * Dazwischen: Mittelwert der Nachbarn. Ist deren Lücke bereits kleiner
+     * als MIN_SORT_GAP, wird die Sektion einmalig neu auf 1000er-Schritte
+     * verteilt und der Wert danach erneut bestimmt.
+     */
+    function orderKeyAt(prioritized, index, excludeId) {
+      const list = sectionTasks(prioritized, excludeId);
+      if (!list.length) return 1000;
+      if (index <= 0) return list[0].sortKey - 1000;
+      if (index >= list.length) return list[list.length - 1].sortKey + 1000;
+      const before = list[index - 1].sortKey;
+      const after = list[index].sortKey;
+      if (after - before < MIN_SORT_GAP) {
+        rebalanceSection(prioritized);
+        return orderKeyAt(prioritized, index, excludeId);
+      }
+      return (before + after) / 2;
+    }
+
+    /** Verteilt die sortKeys einer Sektion neu (1000, 2000, …). */
+    function rebalanceSection(prioritized) {
+      const now = Date.now();
+      sectionTasks(prioritized).forEach(function (t, i) {
+        t.sortKey = (i + 1) * 1000;
+        t.sortedAt = now;
+      });
+    }
+
+    /** Setzt eine Task an Position index ihrer (neuen) Sektion und stempelt
+        sortedAt. Speichert und rendert bewusst nicht selbst. */
+    function placeTask(task, prioritized, index) {
+      task.sortKey = orderKeyAt(prioritized, index, task.id);
+      task.prioritized = !!prioritized;
+      task.sortedAt = Date.now();
+    }
+
+    /* ------------------------------------------------------------
        Wieder geöffnete Aufgaben
 
        Den Journal-Eintrag einfach zu löschen genügt nicht: beim Sync werden
@@ -919,7 +1033,12 @@
      * normalizeTaskText(). Für Altbestand ändert das nichts: die alten
      * Einträge waren durch maxlength="120" ohnehin kurz und einzeilig,
      * gekappt wird erst ab TASK_MAX (2000). Ein eigener Migrationsschritt
-     * ist deshalb nicht nötig – das Datenmodell bleibt { id, name, createdAt }.
+     * ist deshalb nicht nötig.
+     *
+     * Seit der Priorisierung trägt jede offene Task zusätzlich die
+     * Ordnungsfelder prioritized/sortKey/sortedAt. Altbestand ohne diese
+     * Felder wird am Ende von ensureTaskOrder() ergänzt – in bisheriger
+     * Reihenfolge, unpriorisiert, idempotent.
      */
     function normalize(raw) {
       const base = emptyState();
@@ -957,9 +1076,16 @@
             createdAt: createdAt,
           }));
         } else {
-          base.tasks.push(carryNote(t, { id: (t && t.id) || newId(), name: name, createdAt: createdAt }));
+          const open = carryNote(t, { id: (t && t.id) || newId(), name: name, createdAt: createdAt });
+          // Ordnungsfelder unverändert mitnehmen – fehlen sie (Altbestand),
+          // ergänzt ensureTaskOrder() sie unten in bisheriger Reihenfolge.
+          if (t && typeof t.prioritized !== 'undefined') open.prioritized = t.prioritized;
+          if (t && typeof t.sortKey !== 'undefined') open.sortKey = t.sortKey;
+          if (t && typeof t.sortedAt !== 'undefined') open.sortedAt = t.sortedAt;
+          base.tasks.push(open);
         }
       });
+      ensureTaskOrder(base.tasks);
 
       base.day = fallbackDay;
       base.celebrationsToday = Number(raw.celebrationsToday) || 0;
@@ -1491,7 +1617,9 @@
     }
 
     function renderList() {
-      const tasks = state.tasks;
+      // Nicht die rohe Array-Reihenfolge, sondern nach Sektion + sortKey –
+      // die Array-Reihenfolge kann nach einem Geräte-Merge beliebig sein.
+      const tasks = orderedTasks();
       el.list.innerHTML = tasks.map(taskRow).join('');
       el.emptyState.classList.toggle('hidden', tasks.length > 0);
 
@@ -1635,6 +1763,7 @@
         return false;
       }
       const task = { id: newId(), name: clean, createdAt: todayKey() };
+      placeTask(task, false, Infinity);      // unpriorisiert ans Ende
       freshIds.add(task.id);
       state.tasks.push(task);
       save();
@@ -1735,6 +1864,7 @@
           name: entry.name,
           createdAt: entry.createdAt || entry.date,
         });
+        placeTask(task, false, Infinity);    // unpriorisiert ans Ende
         state.tasks.push(task);
         freshIds.add(task.id);
       }
@@ -2677,7 +2807,9 @@
     // zurück und verhindert so eine Endlosschleife.
     function applySyncPayload(payload) {
       if (!payload || typeof payload !== 'object') return;
-      if (Array.isArray(payload.tasks)) state.tasks = payload.tasks;
+      // ensureTaskOrder: ein Cloud-Stand von einem Gerät mit alter
+      // App-Version kann Tasks ohne Ordnungsfelder enthalten.
+      if (Array.isArray(payload.tasks)) state.tasks = ensureTaskOrder(payload.tasks);
       if (Array.isArray(payload.journal)) state.journal = payload.journal;
       state.reopened = sanitizeReopened(payload.reopened);
       if (payload.history && typeof payload.history === 'object') state.history = payload.history;
@@ -3187,6 +3319,26 @@
       return map;
     }
 
+    /* Ordnungsfelder (prioritized/sortKey/sortedAt): pro Task gewinnt die
+       Seite mit dem JÜNGEREN sortedAt – unabhängig davon, wessen Task-Objekt
+       inhaltlich (Text, Anmerkung) übernommen wird. Ohne diesen Abgleich
+       würde „bei offenen Tasks gewinnt die Cloud“ eine frische lokale
+       Umsortierung durch einen älteren Cloud-Stand still überschreiben. */
+    function orderStamp(t) {
+      const s = Number(t && t.sortedAt);
+      return isFinite(s) && s > 0 ? s : 0;
+    }
+    function withNewerOrder(winner, other) {
+      if (!other || orderStamp(other) <= orderStamp(winner)) return winner;
+      const k = Number(other.sortKey);
+      if (!isFinite(k)) return winner;
+      const out = Object.assign({}, winner);
+      out.prioritized = !!other.prioritized;
+      out.sortKey = k;
+      out.sortedAt = orderStamp(other);
+      return out;
+    }
+
     // Wieder geöffnete Aufgaben: je id gilt der jüngere Zeitpunkt.
     function mergeReopened(a, b) {
       const out = {};
@@ -3232,7 +3384,11 @@
       const done = new Set(journal.map(function (e) { return e.id; }));
       const tm = new Map();
       (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
-      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      // Inhaltlich gewinnt beim Erstabgleich die lokale Fassung – die
+      // Reihenfolge aber die Seite mit dem jüngeren sortedAt.
+      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
+        if (t && t.id) tm.set(t.id, withNewerOrder(t, tm.get(t.id)));
+      });
       const tasks = Array.from(tm.values()).filter(function (t) { return !done.has(t.id); });
       return {
         tasks: tasks,
@@ -3250,8 +3406,15 @@
       const reopened = mergeReopened(remote.reopened, local.reopened);
       const journal = unionJournal(remote.journal, local.journal, reopened);
       const done = new Set(journal.map(function (e) { return e.id; }));
+      const lm = new Map();
+      (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) { if (t && t.id) lm.set(t.id, t); });
       const tm = new Map();
-      (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
+      // Inhaltlich gewinnt die Cloud – die Reihenfolge aber die Seite mit
+      // dem jüngeren sortedAt: eine gerade gemachte lokale Umsortierung
+      // darf ein (älterer) eintreffender Cloud-Stand nicht überschreiben.
+      (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) {
+        if (t && t.id) tm.set(t.id, withNewerOrder(t, lm.get(t.id)));
+      });
       (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
         if (t && t.id && !tm.has(t.id) && recentlyReopened(local.reopened, t.id)) tm.set(t.id, t);
       });
