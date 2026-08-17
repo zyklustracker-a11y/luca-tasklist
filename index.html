@@ -299,6 +299,63 @@
     }
     .slot-task-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+    /* ---- Drag & Drop per Long-Press ---- */
+    /* iOS: kein „Kopieren/Nachschlagen“-Menü und keine Text-Selektion beim
+       langen Drücken auf eine Task. Textfelder bleiben ausgenommen. */
+    #habits-list li, #habits-list .habit-row {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #habits-list textarea { -webkit-user-select: text; user-select: text; }
+    /* Overscroll-Bounce/Pull-to-Refresh sollen den Drag nicht stören. */
+    #habits-list { overscroll-behavior: contain; }
+
+    /* Aufnahme-Feedback: anheben + kurzer Highlight-Puls. Muss ohne
+       Vibration klar erkennbar sein (navigator.vibrate gibt es auf iOS
+       nicht – auch nicht im Standalone-Modus). */
+    li.drag-chosen .habit-row {
+      transform: scale(1.03);
+      border-color: rgba(74, 222, 128, 0.45);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(74, 222, 128, 0.3);
+      animation: pickupPulse 0.4s ease;
+    }
+    @keyframes pickupPulse {
+      0% { background: rgba(34, 197, 94, 0.22); }
+      100% { background: rgba(15, 22, 18, 0.6); }
+    }
+    /* Die mitfliegende Kopie unter dem Finger (forceFallback). */
+    li.drag-fallback { opacity: 0.95 !important; list-style: none; }
+    li.drag-fallback .habit-row {
+      transform: scale(1.03);
+      box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(74, 222, 128, 0.35);
+    }
+    /* Die Lücke, in die die Task fallen wird. */
+    li.drag-ghost { opacity: 0.4; }
+    li.drag-ghost .habit-row {
+      transform: none;
+      animation: none;
+      border-style: dashed;
+      border-color: rgba(74, 222, 128, 0.5);
+      background: rgba(34, 197, 94, 0.08);
+    }
+    /* Während des Drags: Rest der Liste leicht zurücknehmen, nichts scrollt
+       ausser dem Auto-Scroll (touch-action), Cursor am Desktop. */
+    body.is-dragging { cursor: grabbing; }
+    body.is-dragging #habits-list { touch-action: none; }
+    body.is-dragging #habits-list li:not(.drag-ghost):not(.drag-chosen) .habit-row { opacity: 0.7; }
+
+    /* Sektionswechsel über die Trennlinie: Ziel leuchtet kurz auf. */
+    .drop-flash { animation: dropFlash 0.55s ease; }
+    .section-title.drop-flash { border-radius: 0.5rem; }
+    @keyframes dropFlash {
+      0% { background-color: rgba(34, 197, 94, 0.35); box-shadow: 0 0 16px rgba(74, 222, 128, 0.55); }
+      100% { background-color: transparent; box-shadow: none; }
+    }
+
+    /* Tastatur-Fallback: Zeilen sind fokussierbar, Alt+Pfeil verschiebt. */
+    .habit-row:focus-visible { outline: 2px solid #4ade80; outline-offset: 2px; }
+
     .habit-row { transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.3s ease; }
     .habit-row:active { transform: scale(0.985); }
     .habit-row.just-checked { animation: rowGlow 0.6s ease; }
@@ -847,6 +904,12 @@
     <button id="toast-action" type="button" class="hidden shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent-glow transition hover:bg-accent/25"></button>
   </div>
 
+  <!-- SortableJS (lokal gebündelt, kein CDN zur Laufzeit – offline-fest und
+       ohne Build-Step). Liefert Long-Press-Erkennung, Auto-Scroll und das
+       Sortieren über zwei verbundene Listen. Lädt die Datei nicht (allererster
+       Besuch offline), läuft die App einfach ohne Drag & Drop weiter. -->
+  <script src="./vendor/sortable.min.js"></script>
+
   <script>
   (function () {
     'use strict';
@@ -1339,6 +1402,8 @@
       list: document.getElementById('habits-list'),
       prioList: document.getElementById('prio-list'),
       restList: document.getElementById('rest-list'),
+      prioTitle: document.getElementById('prio-title'),
+      restTitle: document.getElementById('rest-title'),
       sectionDivider: document.getElementById('section-divider'),
       emptyState: document.getElementById('empty-state'),
       showAddBtn: document.getElementById('show-add-habit-btn'),
@@ -1427,6 +1492,11 @@
     let editingId = null;
     let freshIds = new Set();
     let firstRender = true;
+    // Aktiver Long-Press-Drag: solange er läuft, wird nicht gerendert und
+    // eingehende Sync-Stände werden gepuffert – sonst spränge die gezogene
+    // Task aus dem Finger.
+    let dragActive = false;
+    let pendingSyncPayload = null;
     // Welche langen Texte gerade ausgeklappt sind. Reine Ansichtssache –
     // wird bewusst nicht gespeichert, beim nächsten Start ist wieder alles
     // ordentlich zusammengeklappt.
@@ -1900,6 +1970,9 @@
     });
 
     function render() {
+      // Während eines aktiven Drags niemals rendern – nach dem Drop wird
+      // genau einmal gerendert (onEnd).
+      if (dragActive) return;
       applyIdentity();
       renderStats();
       renderList();
@@ -2449,6 +2522,153 @@
     el.list.addEventListener('input', function (e) {
       if (e.target.classList.contains('task-edit-input')) autoGrow(e.target);
     });
+
+    /* ============================================================
+       11b. Drag & Drop per Long-Press (SortableJS, lokal gebündelt)
+
+       Zwei verbundene Listen (group), delay 400 ms mit delayOnTouchOnly:
+       kurzes Wischen scrollt normal weiter, erst Halten nimmt die Task auf.
+       touchStartThreshold bricht den Long-Press ab, wenn sich der Finger
+       vorher mehr als ~10 px bewegt. forceFallback sorgt für identisches
+       Verhalten auf iOS (kein natives HTML5-DnD), Auto-Scroll ist einge-
+       baut. Nach dem Drop wird der Zustand aus dem Sortable-Ergebnis
+       aktualisiert und GENAU EINMAL neu gerendert.
+       ============================================================ */
+
+    /**
+     * Haptik ist reine Zugabe: navigator.vibrate existiert auf iOS nicht
+     * (Feature-Detection, greift z. B. auf Android). Zusätzlich der
+     * inoffizielle iOS-Trick über ein verstecktes <input type="checkbox"
+     * switch>, dessen Umschalten auf neueren Versionen haptisches Feedback
+     * auslöst – kann jederzeit brechen und darf deshalb nie Voraussetzung
+     * sein: schlägt alles fehl, passiert einfach nichts.
+     */
+    let hapticSwitch = null;
+    function tryHaptic() {
+      try {
+        if (navigator.vibrate) { navigator.vibrate(10); return; }
+        if (!hapticSwitch) {
+          hapticSwitch = document.createElement('input');
+          hapticSwitch.type = 'checkbox';
+          hapticSwitch.setAttribute('switch', '');
+          hapticSwitch.setAttribute('aria-hidden', 'true');
+          hapticSwitch.tabIndex = -1;
+          hapticSwitch.style.cssText = 'position:fixed;left:-100px;width:1px;height:1px;opacity:0;pointer-events:none';
+          document.body.appendChild(hapticSwitch);
+        }
+        hapticSwitch.click();
+      } catch (e) {/* reine Zugabe */}
+    }
+
+    /** Ziel-Sektion (Titel) und Trennlinie kurz aufleuchten lassen, wenn die
+        Task über die Trennlinie in die andere Sektion gezogen wird. */
+    function flashDropTarget(toEl) {
+      [el.sectionDivider, toEl === el.prioList ? el.prioTitle : el.restTitle].forEach(function (node) {
+        if (!node) return;
+        node.classList.remove('drop-flash');
+        void node.offsetWidth;               // Animation neu anstossen
+        node.classList.add('drop-flash');
+      });
+    }
+
+    /**
+     * Wendet einen während des Drags gepufferten Sync-Stand nach dem Drop
+     * an. Die Ordnungsfelder gerade umsortierter Tasks (jüngeres sortedAt)
+     * bleiben dabei erhalten – dieselbe Regel wie im Geräte-Merge, sonst
+     * würde der soeben ausgeführte Drop vom älteren Stand überschrieben.
+     */
+    function flushPendingSync() {
+      const p = pendingSyncPayload;
+      pendingSyncPayload = null;
+      if (!p) return false;
+      if (Array.isArray(p.tasks)) {
+        const localById = new Map();
+        state.tasks.forEach(function (t) { localById.set(t.id, t); });
+        p.tasks = p.tasks.map(function (t) {
+          const l = t && localById.get(t.id);
+          if (l && (Number(l.sortedAt) || 0) > (Number(t && t.sortedAt) || 0)) {
+            return Object.assign({}, t, { prioritized: l.prioritized, sortKey: l.sortKey, sortedAt: l.sortedAt });
+          }
+          return t;
+        });
+      }
+      applySyncPayload(p);                   // rendert selbst
+      return true;
+    }
+
+    function finishDrag(evt) {
+      document.body.classList.remove('is-dragging');
+      if (!dragActive) return;
+      dragActive = false;
+
+      const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
+      const task = id ? state.tasks.find(function (t) { return t.id === id; }) : null;
+      if (task && evt.to) {
+        const toPrio = evt.to === el.prioList;
+        // newIndex zählt die Position in der Ziel-Liste; ohne die bewegte
+        // Task selbst ist das genau der Einfüge-Index für orderKeyAt().
+        placeTask(task, toPrio, evt.newIndex);
+        save();                              // ein Zustands-Write, debounced in die Cloud
+      }
+      // Genau EIN Render nach dem Drop – mit dem gepufferten Sync-Stand,
+      // falls währenddessen einer eingetroffen ist.
+      if (!flushPendingSync()) render();
+    }
+
+    function initDrag() {
+      if (!window.Sortable) return;          // Datei (noch) nicht da: App läuft ohne Drag weiter
+      let lastDragTarget = null;
+      const options = {
+        group: 'tasks',
+        animation: reduceMotion ? 0 : 180,   // andere Tasks weichen animiert aus
+        delay: 400,                          // Long-Press
+        delayOnTouchOnly: true,              // Maus zieht sofort
+        touchStartThreshold: 10,             // >10 px vor Ablauf → Abbruch, normales Scrollen
+        forceFallback: true,
+        fallbackOnBody: true,
+        fallbackTolerance: 4,
+        ghostClass: 'drag-ghost',
+        chosenClass: 'drag-chosen',
+        fallbackClass: 'drag-fallback',
+        // Bedienelemente starten keinen Drag, verhalten sich aber normal.
+        filter: 'button, input, textarea, a, [data-action]',
+        preventOnFilter: false,
+        scroll: true,                        // Auto-Scroll nahe am Rand
+        scrollSensitivity: 90,
+        scrollSpeed: 12,
+        bubbleScroll: true,
+        onChoose: function (evt) {
+          // Touch: Aufnahme nach 400 ms Halten – ab hier deutliches Feedback.
+          // Maus: kein Delay, das Feedback kommt erst beim echten Drag-Start,
+          // sonst flackert jeder simple Klick auf eine Zeile.
+          const oe = evt.originalEvent || {};
+          if (oe.pointerType === 'touch' || oe.touches) {
+            document.body.classList.add('is-dragging');
+            tryHaptic();
+          }
+        },
+        onUnchoose: function () {
+          if (!dragActive) document.body.classList.remove('is-dragging');
+        },
+        onStart: function (evt) {
+          dragActive = true;
+          lastDragTarget = evt.from;
+          document.body.classList.add('is-dragging');
+        },
+        onMove: function (evt) {
+          if (evt.to && evt.to !== lastDragTarget) {
+            lastDragTarget = evt.to;
+            flashDropTarget(evt.to);         // Sektionswechsel sichtbar machen
+          }
+        },
+        onEnd: finishDrag,
+      };
+      try {
+        new Sortable(el.prioList, options);
+        new Sortable(el.restList, options);
+      } catch (e) {/* ohne Drag & Drop bleibt alles andere benutzbar */}
+    }
+    initDrag();
 
     function showAddForm() {
       el.showAddBtn.classList.add('hidden');
@@ -3203,6 +3423,9 @@
     // zurück und verhindert so eine Endlosschleife.
     function applySyncPayload(payload) {
       if (!payload || typeof payload !== 'object') return;
+      // Während eines aktiven Drags puffern – flushPendingSync() wendet den
+      // Stand nach dem Drop an, sonst springt die Task aus dem Finger.
+      if (dragActive) { pendingSyncPayload = payload; return; }
       // ensureTaskOrder: ein Cloud-Stand von einem Gerät mit alter
       // App-Version kann Tasks ohne Ordnungsfelder enthalten.
       if (Array.isArray(payload.tasks)) state.tasks = ensureTaskOrder(payload.tasks);
