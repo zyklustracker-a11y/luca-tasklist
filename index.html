@@ -170,6 +170,74 @@
 
     .progress-fill { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
 
+    /* ---- Zwei Sektionen: Priorisierte Tasks / Weitere Tasks ----
+       Bewusst eigene Klassen statt neuer Tailwind-Utilities: die
+       vorkompilierte tailwind.css kennt nur Klassen, die beim letzten Build
+       im HTML standen – neue blieben stumm (siehe Kommentar oben). */
+    .section-title {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.75rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.12em;
+      color: #64748b;
+    }
+    .section-title-prio { color: rgba(74, 222, 128, 0.9); }
+    .section-divider {
+      height: 1px; margin: 1.25rem 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    /* Leere Prio-Sektion: die Liste selbst bleibt als Drop-Zone stehen
+       (mind. 64 px hoch), der Hinweis liegt als reiner Text darüber.
+       Sobald ein Element drin ist – auch der Drag-Platzhalter –, ist
+       :empty nicht mehr wahr und beides verschwindet von selbst. */
+    .prio-zone { position: relative; }
+    #prio-list:empty {
+      min-height: 64px;
+      border: 1px dashed rgba(74, 222, 128, 0.25);
+      border-radius: 1rem;
+      background: rgba(34, 197, 94, 0.04);
+    }
+    .prio-empty {
+      display: none;
+      position: absolute; inset: 0;
+      align-items: center; justify-content: center;
+      padding: 0.5rem 1.25rem;
+      text-align: center;
+      font-size: 0.75rem; line-height: 1.5;
+      color: rgba(148, 163, 184, 0.75);
+      pointer-events: none;
+    }
+    #prio-list:empty + .prio-empty { display: flex; }
+
+    /* Abgeleitete Nummerierung: die Zahl steht nur im DOM, nie im Modell.
+       Plätze 1–3 kräftig (voller Kreis + Balken links), ab Platz 4 dezent. */
+    .prio-num {
+      display: flex; align-items: center; justify-content: center;
+      width: 1.5rem; height: 1.5rem; flex-shrink: 0;
+      border-radius: 9999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem; font-weight: 600;
+    }
+    .prio-num-hot {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #04120a;
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+    }
+    .prio-num-soft {
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #94a3b8;
+    }
+    .habit-row.prio-top { position: relative; }
+    .habit-row.prio-top::before {
+      content: '';
+      position: absolute; left: -1px; top: 14%; bottom: 14%; width: 3px;
+      border-radius: 9999px;
+      background: linear-gradient(180deg, #4ade80, #16a34a);
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+    }
+
     .habit-row { transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.3s ease; }
     .habit-row:active { transform: scale(0.985); }
     .habit-row.just-checked { animation: rowGlow 0.6s ease; }
@@ -399,11 +467,32 @@
       </div>
     </div>
 
-    <!-- Task list -->
-    <ul id="habits-list" class="mb-4 space-y-3"></ul>
-    <div id="empty-state" class="mb-4 hidden rounded-2xl border border-dashed border-white/10 bg-surface-800/40 px-6 py-10 text-center">
-      <p class="text-base font-medium text-slate-300">Nichts offen</p>
-      <p class="mt-1 text-sm text-slate-500">Füg unten deine erste Task für heute hinzu.</p>
+    <!-- Task-Liste: zwei Sektionen in einem Wrapper. Der Wrapper behält die
+         id habits-list – alle Event-Delegationen und querySelector-Aufrufe
+         aus dem Skript laufen unverändert über ihn. Die beiden inneren <ul>
+         sind bewusst dauerhaft im DOM (nie ersetzt, nur ihr Inhalt): daran
+         hängen später die Drag-&-Drop-Instanzen. -->
+    <div id="habits-list" class="mb-4">
+      <section aria-labelledby="prio-title">
+        <h2 id="prio-title" class="section-title section-title-prio">
+          <span aria-hidden="true">★</span> Priorisierte Tasks
+        </h2>
+        <!-- prio-zone: Positionsanker für den Leer-Platzhalter. Die leere
+             Liste selbst bleibt als mindestens 64 px hohe Drop-Zone stehen. -->
+        <div class="prio-zone">
+          <ul id="prio-list" class="space-y-3"></ul>
+          <p id="prio-empty" class="prio-empty">Noch keine priorisierten Tasks – beim Anlegen „Ja, priorisieren“ wählen oder eine Task lange drücken und hochziehen.</p>
+        </div>
+      </section>
+      <div id="section-divider" class="section-divider" aria-hidden="true"></div>
+      <section aria-labelledby="rest-title">
+        <h2 id="rest-title" class="section-title">Weitere Tasks</h2>
+        <ul id="rest-list" class="space-y-3"></ul>
+        <div id="empty-state" class="hidden rounded-2xl border border-dashed border-white/10 bg-surface-800/40 px-6 py-10 text-center">
+          <p class="text-base font-medium text-slate-300">Nichts offen</p>
+          <p class="mt-1 text-sm text-slate-500">Füg unten deine erste Task für heute hinzu.</p>
+        </div>
+      </section>
     </div>
 
     <!-- Add task -->
@@ -1160,6 +1249,9 @@
       streakCount: document.getElementById('streak-count'),
       streakLabel: document.getElementById('streak-label'),
       list: document.getElementById('habits-list'),
+      prioList: document.getElementById('prio-list'),
+      restList: document.getElementById('rest-list'),
+      sectionDivider: document.getElementById('section-divider'),
       emptyState: document.getElementById('empty-state'),
       showAddBtn: document.getElementById('show-add-habit-btn'),
       addForm: document.getElementById('add-habit-form'),
@@ -1560,9 +1652,17 @@
       '</button>';
     }
 
-    function taskRow(task, index) {
+    /**
+     * Eine Zeile der offenen Liste. opts steuert die Prio-Darstellung:
+     *   opts.number – Platznummer in der Prio-Sektion (1-basiert). Sie wird
+     *   hier aus der Render-Position abgeleitet und nirgends gespeichert –
+     *   nach Löschen/Abhaken/Verschieben stimmt sie dadurch immer von selbst.
+     */
+    function taskRow(task, index, opts) {
+      opts = opts || {};
       const isEditing = editingId === task.id;
       const enter = firstRender || freshIds.has(task.id);
+      const hot = !!opts.number && opts.number <= 3;   // Top 3 hervorgehoben
       // Mehrzeilige und lange Texte oben ausrichten – bei kurzen bleibt es
       // bei der vertikalen Mitte, damit einzeilige Zeilen aussehen wie bisher.
       const tall = task.name.indexOf('\n') !== -1 || task.name.length > 60;
@@ -1570,10 +1670,14 @@
       const rowClasses = [
         'habit-row ' + rowShape + ' rounded-2xl border bg-surface-800/60 px-3 py-4 shadow-card backdrop-blur-sm sm:gap-3 sm:px-4',
         isEditing ? 'border-accent/30 ring-1 ring-accent/20' : 'border-white/5 hover:border-accent/20 hover:bg-surface-700/50',
+        (!isEditing && hot) ? 'prio-top' : '',
       ].join(' ');
+      const numberBadge = (!isEditing && opts.number)
+        ? '<span class="prio-num ' + (hot ? 'prio-num-hot' : 'prio-num-soft') + '" aria-hidden="true">' + opts.number + '</span>'
+        : '';
 
       if (isEditing) {
-        return '<li>' +
+        return '<li data-id="' + task.id + '">' +
           '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
             '<textarea class="task-edit-input task-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
               'data-id="' + task.id + '" rows="1" maxlength="2000" enterkeyhint="enter" aria-label="Task bearbeiten">' + escapeHtml(task.name) + '</textarea>' +
@@ -1587,8 +1691,9 @@
       }
 
       const expanded = expandedIds.has(task.id);
-      return '<li class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
+      return '<li data-id="' + task.id + '" class="' + (enter ? 'row-enter' : '') + '" style="animation-delay:' + (enter ? Math.min(index, 6) * 0.05 : 0) + 's">' +
         '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
+          numberBadge +
           '<span class="flex shrink-0 items-center' + (tall ? '' : ' self-center') + '">' +
             '<input type="checkbox" class="habit-checkbox m-0 block" data-id="' + task.id + '" id="cb-' + task.id + '" ' +
               'aria-label="' + escapeHtml(shortText(task.name)) + ' abhaken" />' +
@@ -1619,8 +1724,15 @@
     function renderList() {
       // Nicht die rohe Array-Reihenfolge, sondern nach Sektion + sortKey –
       // die Array-Reihenfolge kann nach einem Geräte-Merge beliebig sein.
-      const tasks = orderedTasks();
-      el.list.innerHTML = tasks.map(taskRow).join('');
+      const prio = sectionTasks(true);
+      const rest = sectionTasks(false);
+      el.prioList.innerHTML = prio.map(function (t, i) {
+        return taskRow(t, i, { number: i + 1 });
+      }).join('');
+      el.restList.innerHTML = rest.map(function (t, i) {
+        return taskRow(t, i + prio.length, {});
+      }).join('');
+      const tasks = state.tasks;
       el.emptyState.classList.toggle('hidden', tasks.length > 0);
 
       if (tasks.length === 0) {
