@@ -227,17 +227,29 @@ const labels = (page, sel) => page.$$eval(sel + ' .habit-label', els => els.map(
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: src.x, y: src.y }] });
   await page.waitForFunction(() => document.body.classList.contains('is-dragging'), { timeout: 5000 }); // Long-Press
   assert.ok(await page.evaluate(() => document.getElementById('menu-btn').classList.contains('menu-btn-hidden') || getComputedStyle(document.getElementById('menu-btn')).opacity === '0'), 'Menü-Knopf beim Drag weg');
+  // Höhe der Liste kurz VOR dem Eintritt in die Leiste – gleich wird
+  // geprüft, dass sie sich beim Moduswechsel nicht ändert.
+  const listHeightBefore = await page.evaluate(() => document.getElementById('habits-list').getBoundingClientRect().height);
   for (let i = 1; i <= 20; i++) {
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove',
       touchPoints: [{ x: src.x + (dst.x - src.x) * i / 20, y: src.y + (dst.y - src.y) * i / 20 }] });
     await page.waitForTimeout(16);
   }
-  // Über der Leiste: Kategorie-Modus an, Sortier-Lücke unsichtbar
+  // Über der Leiste: Kategorie-Modus an
   assert.ok(await page.evaluate(() => document.getElementById('cat-bar').classList.contains('cat-drop-mode')), 'Leiste im Zuweisungs-Modus');
+  // Die Sortier-Lücke bleibt STEHEN – nichts darf im Layout springen,
+  // während der Finger darüber schwebt –, ist aber optisch zurückgenommen.
+  const listHeightDuring = await page.evaluate(() => document.getElementById('habits-list').getBoundingClientRect().height);
+  assert.ok(Math.abs(listHeightDuring - listHeightBefore) < 1,
+    'kein Layout-Sprung beim Wechsel in den Kategorie-Modus (' + listHeightBefore + ' → ' + listHeightDuring + ')');
   assert.ok(await page.evaluate(() => {
     const g = document.querySelector('li.drag-ghost');
-    return !g || getComputedStyle(g).display === 'none';
-  }), 'Sortier-Lücke verschwindet');
+    return !g || Number(getComputedStyle(g).opacity) <= 0.2;
+  }), 'Sortier-Lücke optisch zurückgenommen');
+  // Die Leiste selbst bleibt unverzerrt (transform würde den Text unscharf
+  // machen und den sticky-Kontext brechen).
+  assert.strictEqual(await page.evaluate(() => getComputedStyle(document.getElementById('cat-bar')).transform), 'none',
+    'kein transform auf der Leiste');
   // ~400 ms verweilen → Pill leuchtet als aktives Ziel
   await page.waitForTimeout(500);
   assert.ok(await page.evaluate(() => document.querySelector('.cat-pill[data-cat-id="c-priv"]').classList.contains('cat-drop-armed')), 'Dwell-Highlight nach ~400 ms');
