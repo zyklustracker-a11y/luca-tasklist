@@ -97,6 +97,7 @@
     #onboarding-modal { z-index: 95; }
     #note-modal { z-index: 96; }
     #add-sheet { z-index: 97; }
+    #menu-sheet { z-index: 97; }
     #celebration-overlay { z-index: 100; }
     #toast { z-index: 120; }
 
@@ -325,8 +326,10 @@
       0% { background: rgba(34, 197, 94, 0.22); }
       100% { background: rgba(15, 22, 18, 0.6); }
     }
-    /* Die mitfliegende Kopie unter dem Finger (forceFallback). */
-    li.drag-fallback { opacity: 0.95 !important; list-style: none; }
+    /* Die mitfliegende Kopie unter dem Finger (forceFallback). pointer-events
+       aus: der Treffertest für die Kategorie-Pills läuft über
+       elementFromPoint und würde sonst immer nur die Kopie selbst finden. */
+    li.drag-fallback { opacity: 0.95 !important; list-style: none; pointer-events: none !important; }
     li.drag-fallback .habit-row {
       transform: scale(1.03);
       box-shadow: 0 18px 44px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(74, 222, 128, 0.35);
@@ -397,6 +400,190 @@
     .celebration-message-show { animation: celebration-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
 
     .seg-btn { transition: all 0.2s ease; }
+
+    /* ---- Kategorie-Leiste ----
+       Sticky ganz oben, klein und dezent. Sie ist zugleich Drop-Ziel beim
+       Drag (Kategorie zuweisen) – deshalb bleibt sie beim Scrollen stehen.
+       Eigene Klassen statt neuer Tailwind-Utilities (siehe Kommentar oben). */
+    #cat-bar {
+      position: sticky; top: 0; z-index: 60;
+      display: none;
+      padding: calc(env(safe-area-inset-top) + 0.375rem) 0 0.375rem;
+      background: rgba(10, 15, 13, 0.88);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    }
+    body.has-catbar #cat-bar { display: block; }
+    /* Mit sichtbarer Leiste übernimmt sie die safe-area – der Inhalt darunter
+       braucht dann nur noch einen kleinen Abstand statt des vollen safe-top. */
+    body.has-catbar .safe-top { padding-top: 0.875rem; }
+    .cat-bar-inner {
+      display: flex; align-items: center; gap: 0.375rem;
+      max-width: 32rem; margin: 0 auto;
+      /* rechts Platz für den fixierten Menü-Knopf, damit nichts überlappt */
+      padding: 0 3.5rem 0 1rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .cat-bar-inner::-webkit-scrollbar { display: none; }
+    .cat-pill {
+      flex-shrink: 0;
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      min-height: 30px; padding: 0.2rem 0.65rem;
+      border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 9999px;
+      background: rgba(15, 22, 18, 0.6);
+      font-size: 0.75rem; font-weight: 600; color: #94a3b8;
+      white-space: nowrap;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+                  transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    .cat-pill:active { transform: scale(0.96); }
+    .cat-pill.is-active {
+      background: linear-gradient(90deg, rgba(22, 163, 74, 0.95), rgba(34, 197, 94, 0.95));
+      border-color: transparent; color: #04120a;
+    }
+    .cat-pill .cat-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.625rem; font-weight: 500; opacity: 0.75;
+    }
+    .cat-dot { width: 0.4rem; height: 0.4rem; border-radius: 9999px; flex-shrink: 0; }
+    /* Grössere Pill-Variante für Sheets (44-px-nahe Trefferfläche). */
+    .cat-pill-lg { min-height: 40px; padding: 0.375rem 0.875rem; font-size: 0.8125rem; }
+
+    /* Kategorie-Modus beim Drag: Leiste hebt sich sichtbar an, Pills werden
+       Drop-Ziele. Gleichzeitig verschwindet die Sortier-Lücke in der Liste
+       (unten) – so ist eindeutig, dass Loslassen jetzt ZUWEIST, nicht sortiert. */
+    #cat-bar.cat-drop-mode {
+      background: rgba(13, 21, 16, 0.98);
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(74, 222, 128, 0.4);
+      transform: scale(1.02);
+    }
+    #cat-bar.cat-drop-mode .cat-pill {
+      border-style: dashed; border-color: rgba(74, 222, 128, 0.45); color: #cbd5e1;
+      background: rgba(15, 22, 18, 0.8);
+    }
+    .cat-pill.cat-drop-hover {
+      border-style: solid; border-color: rgba(74, 222, 128, 0.8);
+      background: rgba(34, 197, 94, 0.2); color: #e2e8f0;
+    }
+    /* ~400 ms Verweilen über einer Pill: leuchtet als aktives Ziel auf. */
+    .cat-pill.cat-drop-armed {
+      border-style: solid; border-color: transparent;
+      background: linear-gradient(90deg, #16a34a, #22c55e); color: #04120a;
+      box-shadow: 0 0 16px rgba(74, 222, 128, 0.6);
+    }
+    body.cat-drop-mode li.drag-ghost { display: none; }
+
+    /* Kleines Kategorie-Label an Tasks in der Ansicht „Alle“. */
+    .cat-chip {
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      flex-shrink: 0; max-width: 9rem;
+      padding: 0.1rem 0.45rem;
+      border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 9999px;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.625rem; font-weight: 600; letter-spacing: 0.02em;
+      color: #94a3b8;
+    }
+    .cat-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ---- Fester Menü-Knopf oben rechts ----
+       position: fixed, scrollt nicht mit. Sichtbar nur ganz oben bzw. beim
+       Hochscrollen; beim Runterscrollen und während eines Drags weich raus. */
+    #menu-btn {
+      position: fixed;
+      top: max(0.625rem, calc(env(safe-area-inset-top) + 0.25rem));
+      right: max(0.75rem, env(safe-area-inset-right));
+      z-index: 70;
+      display: flex; align-items: center; justify-content: center;
+      width: 2.5rem; height: 2.5rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(16, 25, 19, 0.85);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      color: #cbd5e1;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    #menu-btn:active { transform: scale(0.94); }
+    #menu-btn.menu-btn-hidden, body.is-dragging #menu-btn {
+      opacity: 0; transform: translateY(-8px);
+      pointer-events: none;
+    }
+
+    /* ---- Menü-Sheet (gleiche Mechanik wie das Anlege-Sheet) ---- */
+    .menu-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.875rem; }
+    .menu-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      width: 100%; min-height: 48px;
+      padding: 0.625rem 0.875rem;
+      border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 0.875rem;
+      background: rgba(15, 22, 18, 0.6);
+      color: #e2e8f0; font-size: 0.9375rem; font-weight: 600;
+      text-align: left;
+      transition: background 0.15s ease, transform 0.15s ease;
+    }
+    .menu-item:active { transform: scale(0.98); background: rgba(34, 197, 94, 0.08); }
+    .menu-item svg { flex-shrink: 0; color: #4ade80; }
+
+    /* Kategorien-Verwaltung im Menü-Sheet. */
+    .cat-manage-list {
+      display: flex; flex-direction: column; gap: 0.375rem;
+      margin-top: 0.75rem;
+      max-height: 38vh; overflow-y: auto;
+      overscroll-behavior: contain;
+      touch-action: pan-y;
+    }
+    .cat-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      min-height: 48px; padding: 0.25rem 0.375rem 0.25rem 0.25rem;
+      border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 0.75rem;
+      background: rgba(15, 22, 18, 0.6);
+    }
+    .cat-row-handle {
+      display: flex; align-items: center; justify-content: center;
+      width: 2.25rem; align-self: stretch;
+      color: #64748b;
+      touch-action: none; cursor: grab;
+    }
+    .cat-row-name {
+      min-width: 0; flex: 1;
+      font-size: 0.875rem; font-weight: 600; color: #e2e8f0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cat-row-count { flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.6875rem; color: #64748b; }
+    .cat-row-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 2.5rem; height: 2.5rem; flex-shrink: 0;
+      border-radius: 0.625rem; color: #94a3b8;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .cat-row-btn:active { background: rgba(255, 255, 255, 0.06); }
+    li.cat-row-ghost { opacity: 0.4; }
+    li.cat-row-ghost .cat-row { border-style: dashed; border-color: rgba(74, 222, 128, 0.5); }
+    .cat-confirm {
+      margin-top: 0.5rem; padding: 0.75rem 0.875rem;
+      border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 0.75rem;
+      background: rgba(251, 191, 36, 0.06);
+      font-size: 0.8125rem; line-height: 1.5; color: #cbd5e1;
+    }
+
+    /* Kategorie-Zeile im Anlege-Sheet und im Bearbeiten-Modus. */
+    .sheet-cat-row { margin-top: 0.875rem; }
+    .sheet-cat-label {
+      margin-bottom: 0.5rem;
+      font-size: 0.6875rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      color: #64748b;
+    }
+    .sheet-cat-pills {
+      display: flex; gap: 0.375rem;
+      overflow-x: auto; padding-bottom: 0.25rem;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .sheet-cat-pills::-webkit-scrollbar { display: none; }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -513,16 +700,25 @@
   })();
   </script>
 
+  <!-- Kategorie-Leiste: sticky ganz oben, nur sichtbar, wenn es Kategorien
+       gibt (body.has-catbar). Übernimmt dann die safe-area der Notch und
+       dient beim Drag als Drop-Ziel für die Kategorie-Zuweisung. -->
+  <nav id="cat-bar" aria-label="Kategorien">
+    <div id="cat-bar-inner" class="cat-bar-inner"></div>
+  </nav>
+
+  <!-- Fester Menü-Knopf oben rechts: scrollt nicht mit, blendet beim
+       Runterscrollen und während eines Drags aus (CSS + Scroll-Listener). -->
+  <button id="menu-btn" type="button" aria-label="Menü öffnen">
+    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+    </svg>
+  </button>
+
   <div class="safe-top safe-bottom mx-auto max-w-lg px-4 sm:px-6">
     <!-- Header -->
     <header class="relative mb-8 text-center animate-fade-up">
-      <button id="settings-btn" type="button" aria-label="Einstellungen öffnen"
-        class="absolute right-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-surface-800/70 text-slate-300 transition hover:border-accent/30 hover:text-accent-glow active:scale-95">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.397-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-        </svg>
-      </button>
       <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent-muted/30 px-4 py-1.5 text-xs font-medium uppercase tracking-widest text-accent-glow">
         <span class="h-1.5 w-1.5 rounded-full bg-accent animate-pulse-soft"></span>
         <span id="weekday-badge">Heute</span>
@@ -867,6 +1063,13 @@
         <div id="add-sheet-step1" class="sheet-step">
           <p id="add-sheet-title" class="sheet-title"></p>
           <p class="sheet-sub">Priorisierte Tasks stehen oben in der Liste und bekommen eine Platznummer.</p>
+          <!-- Kategorie-Wahl: nur sichtbar, wenn es Kategorien gibt. In einer
+               Kategorie-Ansicht ist diese vorausgewählt – Anlegen bleibt dann
+               zwei Taps. Jeder Weg aus dem Sheet übernimmt die Vorauswahl. -->
+          <div id="add-sheet-cats" class="sheet-cat-row hidden">
+            <p class="sheet-cat-label" id="add-sheet-cats-label">Kategorie</p>
+            <div id="add-sheet-cat-pills" class="sheet-cat-pills" role="group" aria-labelledby="add-sheet-cats-label"></div>
+          </div>
           <div class="sheet-actions">
             <button id="add-sheet-no" type="button" class="sheet-btn sheet-btn-secondary">Nein, ans Ende</button>
             <button id="add-sheet-yes" type="button" class="sheet-btn sheet-btn-primary">Ja, priorisieren</button>
@@ -876,6 +1079,67 @@
           <p class="sheet-title">Wo einordnen?</p>
           <p class="sheet-sub">Tippe auf den Platz, an dem die Task stehen soll.</p>
           <div id="add-sheet-slots" class="sheet-slots"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menü-Sheet (Zahnrad oben rechts): Task hinzufügen, Kategorien
+       verwalten, Einstellungen. Gleiche Bottom-Sheet-Mechanik wie beim
+       Anlegen (Backdrop, Wisch nach unten, Escape schliessen einfach –
+       hier geht dabei nichts verloren). -->
+  <div id="menu-sheet" class="fixed inset-0 hidden">
+    <div id="menu-sheet-backdrop" class="absolute inset-0 bg-black/60 opacity-0 backdrop-blur-sm transition-opacity duration-300"></div>
+    <div id="menu-sheet-panel" class="sheet-panel" role="dialog" aria-modal="true" aria-label="Menü">
+      <div class="sheet-grabber" aria-hidden="true"></div>
+      <div id="menu-sheet-steps" class="sheet-steps">
+        <div id="menu-step-main" class="sheet-step">
+          <p class="sheet-title">Menü</p>
+          <div class="menu-list">
+            <button id="menu-add-task" type="button" class="menu-item">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              <span>Task hinzufügen</span>
+            </button>
+            <button id="menu-categories" type="button" class="menu-item">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.76c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.076-4.076a1.526 1.526 0 0 1 1.037-.443 48.282 48.282 0 0 0 5.68-.494c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+              </svg>
+              <span>Kategorien</span>
+              <span id="menu-cat-count" class="ml-auto text-xs font-medium text-slate-500"></span>
+            </button>
+            <button id="menu-settings" type="button" class="menu-item">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.559.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.894.149c-.424.07-.764.383-.929.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 0 1-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.398.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 0 1-.12-1.45l.527-.737c.25-.35.272-.806.108-1.204-.165-.397-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+              <span>Einstellungen</span>
+            </button>
+          </div>
+        </div>
+        <div id="menu-step-cats" class="sheet-step" hidden>
+          <div class="flex items-center gap-1">
+            <button id="menu-cats-back" type="button" aria-label="Zurück zum Menü"
+              class="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:text-slate-200 active:scale-95">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            <p class="sheet-title">Kategorien</p>
+          </div>
+          <p class="sheet-sub">Eine Kategorie pro Task, als Filter über der Liste. Am Anfasser ziehen ändert die Reihenfolge.</p>
+          <ul id="cat-manage-list" class="cat-manage-list"></ul>
+          <div id="cat-confirm" class="cat-confirm hidden"></div>
+          <div class="mt-3 flex gap-2">
+            <label for="cat-new-name" class="sr-only">Name der neuen Kategorie</label>
+            <input id="cat-new-name" type="text" maxlength="40" placeholder="Neue Kategorie …" enterkeyhint="done"
+              class="min-w-0 flex-1 rounded-xl border border-white/10 bg-surface-700 px-3 py-2.5 text-base text-slate-100 placeholder:text-slate-500 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" />
+            <button id="cat-add-btn" type="button"
+              class="shrink-0 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">
+              Anlegen
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1013,9 +1277,10 @@
         day: todayKey(),
         bestStreak: 0,
         celebrationsToday: 0,
-        tasks: [],     // ausschliesslich offene Tasks – abgehakte wandern sofort ins Journal
-        journal: [],   // jede erledigte Task, nach Datum – wird nie gelöscht
-        reopened: {},  // id → Zeitpunkt (ms), an dem eine Task wieder geöffnet wurde
+        tasks: [],      // ausschliesslich offene Tasks – abgehakte wandern sofort ins Journal
+        journal: [],    // jede erledigte Task, nach Datum – wird nie gelöscht
+        categories: [], // Kategorien als Filter; gelöschte bleiben als Tombstone (deleted:true)
+        reopened: {},   // id → Zeitpunkt (ms), an dem eine Task wieder geöffnet wurde
         history: {},   // Altbestand aus Version 3, wird nur noch angezeigt
         settings: defaultSettings(),
         profile: defaultProfile(),
@@ -1220,6 +1485,58 @@
     }
 
     /* ------------------------------------------------------------
+       Kategorie-Filter (reine Ansichtssache)
+
+       activeCategoryId wird bewusst NICHT gespeichert: Kaltstart beginnt
+       immer bei „Alle“ (null), während der Sitzung bleibt die Wahl stehen.
+       prioritized/sortKey bleiben global – die Kategorie filtert nur.
+       ------------------------------------------------------------ */
+    let activeCategoryId = null;
+
+    /** Tasks einer Sektion, zusätzlich durch den aktiven Filter gesiebt. */
+    function visibleSectionTasks(prioritized, excludeId) {
+      const list = sectionTasks(prioritized, excludeId);
+      if (activeCategoryId === null) return list;
+      return list.filter(function (t) { return t.categoryId === activeCategoryId; });
+    }
+
+    /**
+     * sortKey für einen Drop an Position index der SICHTBAREN (womöglich
+     * gefilterten) Liste. Berechnet aus den direkt sichtbaren Nachbarn –
+     * so bleibt die globale Reihenfolge widerspruchsfrei, auch wenn
+     * dazwischen unsichtbare Tasks anderer Kategorien liegen:
+     *   – zwischen zwei sichtbaren Nachbarn: deren Mittelwert
+     *   – ganz oben/unten der sichtbaren Liste: global DIREKT vor bzw.
+     *     hinter dem sichtbaren Anker einsortieren (kein Sprung über die
+     *     unsichtbaren Tasks hinweg)
+     *   – sichtbare Liste leer: global ans Ende der Sektion
+     * In „Alle“ ist das exakt das bisherige orderKeyAt()-Verhalten.
+     */
+    function keyBetweenVisible(prioritized, index, excludeId) {
+      const vis = visibleSectionTasks(prioritized, excludeId);
+      const before = (index > 0 && vis.length) ? vis[Math.min(index, vis.length) - 1] : null;
+      const after = (index < vis.length) ? vis[index] : null;
+      if (!before && !after) return orderKeyAt(prioritized, Infinity, excludeId);
+      if (before && after) {
+        if (after.sortKey - before.sortKey < MIN_SORT_GAP) {
+          rebalanceSection(prioritized);
+          return keyBetweenVisible(prioritized, index, excludeId);
+        }
+        return (before.sortKey + after.sortKey) / 2;
+      }
+      const all = sectionTasks(prioritized, excludeId);
+      if (after) return orderKeyAt(prioritized, all.indexOf(after), excludeId);
+      return orderKeyAt(prioritized, all.indexOf(before) + 1, excludeId);
+    }
+
+    /** Wie placeTask, aber index bezieht sich auf die sichtbare Liste. */
+    function placeTaskVisible(task, prioritized, index) {
+      task.sortKey = keyBetweenVisible(prioritized, index, task.id);
+      task.prioritized = !!prioritized;
+      task.sortedAt = Date.now();
+    }
+
+    /* ------------------------------------------------------------
        Wieder geöffnete Aufgaben
 
        Den Journal-Eintrag einfach zu löschen genügt nicht: beim Sync werden
@@ -1263,6 +1580,133 @@
       return !!at && at >= doneStamp(entry);
     }
 
+    /* ------------------------------------------------------------
+       Kategorien
+
+       state.categories: [{ id, name, order, createdAt, updatedAt }]
+         order     – Lückenzahl wie bei den Tasks (1000er-Schritte).
+         updatedAt – Zeitpunkt (ms) der letzten Änderung. Entscheidet beim
+                     Geräte-Abgleich, welcher Stand der Kategorie der
+                     jüngere ist (gleiches Muster wie sortedAt).
+         deleted   – Tombstone: Gelöschte Kategorien bleiben mit deleted:true
+                     im Array. Nur so setzt sich das Löschen auf Gerät A
+                     gegen den älteren Stand auf Gerät B durch – ohne den
+                     Grabstein würde der Merge sie schlicht wieder vereinen.
+                     Nach CAT_TOMBSTONE_MS wird der Grabstein weggeräumt.
+
+       Jede Task trägt zusätzlich:
+         categoryId – id der Kategorie oder null (keine).
+         categoryAt – Zeitpunkt (ms) der letzten Zuweisung; 0 = nie bewusst
+                      zugewiesen. Beim Merge gewinnt die Seite mit dem
+                      jüngeren Stempel, damit ein älterer Cloud-Stand eine
+                      frische lokale Zuweisung nicht überschreibt.
+       ------------------------------------------------------------ */
+    const CAT_NAME_MAX = 40;
+    const CAT_TOMBSTONE_MS = 90 * 24 * 60 * 60 * 1000;   // 90 Tage
+
+    function newCategoryId() {
+      return 'c_' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    }
+
+    function catStamp(c) {
+      const t = Number(c && c.updatedAt);
+      return isFinite(t) && t > 0 ? t : 0;
+    }
+
+    /** Bringt rohe (geladene/gesyncte) Kategorien in Form – idempotent.
+        Ungültige Einträge und abgelaufene Tombstones fallen raus, fehlende
+        order-Werte reihen sich hinten ein. */
+    function sanitizeCategories(raw) {
+      if (!Array.isArray(raw)) return [];
+      const out = [];
+      const seen = new Set();
+      const now = Date.now();
+      raw.forEach(function (c) {
+        if (!c || typeof c !== 'object') return;
+        const id = typeof c.id === 'string' ? c.id : '';
+        if (!id || seen.has(id)) return;
+        const deleted = !!c.deleted;
+        if (deleted && (now - catStamp(c)) > CAT_TOMBSTONE_MS) return;
+        const name = normalizeText(c.name).slice(0, CAT_NAME_MAX);
+        if (!name && !deleted) return;
+        seen.add(id);
+        const order = Number(c.order);
+        const createdAt = Number(c.createdAt);
+        const cat = {
+          id: id,
+          name: name,
+          order: isFinite(order) ? order : 0,
+          createdAt: (isFinite(createdAt) && createdAt > 0) ? createdAt : 0,
+          updatedAt: catStamp(c),
+        };
+        if (deleted) cat.deleted = true;
+        out.push(cat);
+      });
+      let maxOrder = 0;
+      out.forEach(function (c) { if (!c.deleted && c.order > maxOrder) maxOrder = c.order; });
+      out.forEach(function (c) {
+        if (!c.deleted && !(c.order > 0)) { maxOrder += 1000; c.order = maxOrder; }
+      });
+      return out;
+    }
+
+    function byCatOrder(a, b) {
+      return (a.order - b.order) || String(a.id).localeCompare(String(b.id));
+    }
+
+    /** Sichtbare (nicht gelöschte) Kategorien in ihrer Reihenfolge. */
+    function liveCategories() {
+      return state.categories.filter(function (c) { return !c.deleted; }).sort(byCatOrder);
+    }
+
+    /** Kategorie zu einer id – Tombstones zählen als „gibt es nicht“. */
+    function categoryById(id) {
+      if (!id) return null;
+      const c = state.categories.find(function (c2) { return c2.id === id; });
+      return (c && !c.deleted) ? c : null;
+    }
+
+    /**
+     * Migration/Absicherung – Gegenstück zu ensureTaskOrder(): jede Task
+     * bekommt idempotent categoryId (null = keine) und categoryAt (0 = nie
+     * bewusst zugewiesen). Verwaiste ids – Kategorie auf einem anderen Gerät
+     * gelöscht oder Tombstone längst weggeräumt – fallen auf null zurück;
+     * der alte Stempel bleibt dabei stehen, damit das Zurücksetzen keinen
+     * frischen „Zuweisungs-Sieg“ im Merge vortäuscht.
+     */
+    function ensureTaskCategories(tasks, categories) {
+      if (!Array.isArray(tasks)) return [];
+      const live = new Set();
+      (Array.isArray(categories) ? categories : []).forEach(function (c) {
+        if (c && !c.deleted && typeof c.id === 'string') live.add(c.id);
+      });
+      tasks.forEach(function (t) {
+        if (!t) return;
+        if (typeof t.categoryId !== 'string' || !live.has(t.categoryId)) t.categoryId = null;
+        const at = Number(t.categoryAt);
+        t.categoryAt = (isFinite(at) && at > 0) ? at : 0;
+      });
+      return tasks;
+    }
+
+    /** Nimmt die Kategorie-Zuordnung von src nach dst mit – ins Journal und
+        wieder zurück: eine abgehakte Task kehrt so mit ihrer alten Kategorie
+        in die Liste zurück. */
+    function carryCategory(src, dst) {
+      if (src && typeof src.categoryId === 'string' && src.categoryId) {
+        dst.categoryId = src.categoryId;
+        const at = Number(src.categoryAt);
+        if (isFinite(at) && at > 0) dst.categoryAt = at;
+      }
+      return dst;
+    }
+
+    /** Setzt die Kategorie einer Task mit frischem Stempel. */
+    function setTaskCategory(task, categoryId) {
+      task.categoryId = categoryId || null;
+      task.categoryAt = Date.now();
+    }
+
     /**
      * Migration. Bringt jeden bisherigen Stand auf das aktuelle Modell:
      * v1/v2 hiessen die Einträge "habits", v3 kannte zusätzlich den Typ
@@ -1280,6 +1724,11 @@
      * Ordnungsfelder prioritized/sortKey/sortedAt. Altbestand ohne diese
      * Felder wird am Ende von ensureTaskOrder() ergänzt – in bisheriger
      * Reihenfolge, unpriorisiert, idempotent.
+     *
+     * Seit den Kategorien kommen categories[] und je Task categoryId/
+     * categoryAt dazu. Altbestand bekommt idempotent categoryId:null über
+     * ensureTaskCategories() – keine Task wird gelöscht, keine verliert
+     * Reihenfolge, Priorisierung oder Anmerkung.
      */
     function normalize(raw) {
       const base = emptyState();
@@ -1289,16 +1738,17 @@
       const fallbackDay = typeof raw.day === 'string' ? raw.day.slice(0, 10) : todayKey();
 
       base.reopened = sanitizeReopened(raw.reopened);
+      base.categories = sanitizeCategories(raw.categories);
 
       base.journal = Array.isArray(raw.journal)
         ? raw.journal.filter(function (e) { return e && e.name && e.date; }).map(function (e) {
             const date = String(e.date).slice(0, 10);
-            const entry = carryNote(e, {
+            const entry = carryCategory(e, carryNote(e, {
               id: e.id || newId(),
               name: normalizeTaskText(e.name) || 'Unbenannt',
               date: date,
               createdAt: e.createdAt ? String(e.createdAt).slice(0, 10) : date,
-            });
+            }));
             const ts = doneStamp(e);
             if (ts) entry.doneTs = ts;
             return entry;
@@ -1310,12 +1760,12 @@
         if (!name) return;
         const createdAt = String((t && t.createdAt) || fallbackDay).slice(0, 10);
         if (t && t.done) {
-          base.journal.push(carryNote(t, {
+          base.journal.push(carryCategory(t, carryNote(t, {
             id: (t && t.id) || newId(),
             name: name,
             date: String(t.doneAt || fallbackDay).slice(0, 10),
             createdAt: createdAt,
-          }));
+          })));
         } else {
           const open = carryNote(t, { id: (t && t.id) || newId(), name: name, createdAt: createdAt });
           // Ordnungsfelder unverändert mitnehmen – fehlen sie (Altbestand),
@@ -1323,10 +1773,13 @@
           if (t && typeof t.prioritized !== 'undefined') open.prioritized = t.prioritized;
           if (t && typeof t.sortKey !== 'undefined') open.sortKey = t.sortKey;
           if (t && typeof t.sortedAt !== 'undefined') open.sortedAt = t.sortedAt;
+          if (t && typeof t.categoryId !== 'undefined') open.categoryId = t.categoryId;
+          if (t && typeof t.categoryAt !== 'undefined') open.categoryAt = t.categoryAt;
           base.tasks.push(open);
         }
       });
       ensureTaskOrder(base.tasks);
+      ensureTaskCategories(base.tasks, base.categories);
 
       base.day = fallbackDay;
       base.celebrationsToday = Number(raw.celebrationsToday) || 0;
@@ -1456,7 +1909,26 @@
       onboardingPreview: document.getElementById('onboarding-preview'),
       onboardingSave: document.getElementById('onboarding-save'),
       onboardingSkip: document.getElementById('onboarding-skip'),
-      settingsBtn: document.getElementById('settings-btn'),
+      catBar: document.getElementById('cat-bar'),
+      catBarInner: document.getElementById('cat-bar-inner'),
+      menuBtn: document.getElementById('menu-btn'),
+      menuSheet: document.getElementById('menu-sheet'),
+      menuSheetBackdrop: document.getElementById('menu-sheet-backdrop'),
+      menuSheetPanel: document.getElementById('menu-sheet-panel'),
+      menuSheetSteps: document.getElementById('menu-sheet-steps'),
+      menuStepMain: document.getElementById('menu-step-main'),
+      menuStepCats: document.getElementById('menu-step-cats'),
+      menuAddTask: document.getElementById('menu-add-task'),
+      menuCategories: document.getElementById('menu-categories'),
+      menuCatCount: document.getElementById('menu-cat-count'),
+      menuSettings: document.getElementById('menu-settings'),
+      menuCatsBack: document.getElementById('menu-cats-back'),
+      catManageList: document.getElementById('cat-manage-list'),
+      catConfirm: document.getElementById('cat-confirm'),
+      catNewName: document.getElementById('cat-new-name'),
+      catAddBtn: document.getElementById('cat-add-btn'),
+      addSheetCats: document.getElementById('add-sheet-cats'),
+      addSheetCatPills: document.getElementById('add-sheet-cat-pills'),
       settingsModal: document.getElementById('settings-modal'),
       settingsPanel: document.getElementById('settings-panel'),
       settingsBackdrop: document.getElementById('settings-backdrop'),
@@ -1491,6 +1963,9 @@
 
     let state = emptyState();
     let editingId = null;
+    // Kategorie-Wahl im Bearbeiten-Modus: undefined = nicht angefasst,
+    // sonst null oder Kategorie-id. Wird erst beim Speichern übernommen.
+    let editingCatChoice;
     let freshIds = new Set();
     let firstRender = true;
     // Aktiver Long-Press-Drag: solange er läuft, wird nicht gerendert und
@@ -1788,6 +2263,87 @@
         : 'Hier landet alles, was du abhakst';
     }
 
+    /* ---- Kategorie-Leiste & -Labels ---- */
+
+    /** Deterministische Punktfarbe aus der Kategorie-id – kein eigenes
+        Farbfeld im Modell nötig, auf allen Geräten gleich. */
+    function catColor(id) {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+      return 'hsl(' + h + ', 55%, 62%)';
+    }
+
+    /** Offene Tasks je Kategorie (für die Pills und die Verwaltung). */
+    function openCountByCategory() {
+      const counts = {};
+      state.tasks.forEach(function (t) {
+        if (t.categoryId) counts[t.categoryId] = (counts[t.categoryId] || 0) + 1;
+      });
+      return counts;
+    }
+
+    /** Grosse Pill-Variante für Sheets und den Bearbeiten-Modus. extra
+        trägt die data-Attribute des jeweiligen Einsatzorts. */
+    function catPillButton(id, label, active, extra) {
+      return '<button type="button" class="cat-pill cat-pill-lg' + (active ? ' is-active' : '') + '" ' +
+        extra + ' aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        (id ? '<span class="cat-dot" style="background:' + catColor(id) + '"></span>' : '') +
+        '<span>' + escapeHtml(label) + '</span></button>';
+    }
+
+    /** Kleines Kategorie-Label an einer Task – nur in der Ansicht „Alle“,
+        in der Kategorie-Ansicht wäre es redundant. */
+    function catChip(task) {
+      if (activeCategoryId !== null) return '';
+      const cat = categoryById(task.categoryId);
+      if (!cat) return '';
+      return '<span class="cat-chip"><span class="cat-dot" style="background:' + catColor(cat.id) + '"></span>' +
+        '<span class="cat-chip-name">' + escapeHtml(cat.name) + '</span></span>';
+    }
+
+    /**
+     * Pill-Leiste oben: „Alle“, dann die Kategorien in ihrer Reihenfolge.
+     * Ohne Kategorien blendet sich die Leiste komplett aus (has-catbar) –
+     * die Ansicht fällt dann automatisch auf „Alle“ zurück.
+     */
+    function renderCategoryBar() {
+      const cats = liveCategories();
+      document.body.classList.toggle('has-catbar', cats.length > 0);
+      // Aktive Kategorie kann weg sein – auch durch ein anderes Gerät.
+      if (activeCategoryId !== null && !categoryById(activeCategoryId)) activeCategoryId = null;
+      if (!cats.length) { el.catBarInner.innerHTML = ''; return; }
+      const counts = openCountByCategory();
+      function pill(id, label, count, active, dot) {
+        return '<button type="button" class="cat-pill' + (active ? ' is-active' : '') + '" ' +
+          'data-cat-id="' + (id || '') + '" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+          (dot ? '<span class="cat-dot" style="background:' + dot + '"></span>' : '') +
+          '<span>' + escapeHtml(label) + '</span>' +
+          (count != null ? '<span class="cat-count">' + count + '</span>' : '') +
+        '</button>';
+      }
+      let html = pill(null, 'Alle', null, activeCategoryId === null, null);
+      cats.forEach(function (c) {
+        html += pill(c.id, c.name, counts[c.id] || 0, activeCategoryId === c.id, catColor(c.id));
+      });
+      el.catBarInner.innerHTML = html;
+    }
+
+    /** Filter wechseln. null = „Alle“. */
+    function setActiveCategory(id) {
+      const next = id || null;
+      if (next !== null && !categoryById(next)) return;
+      if (next === activeCategoryId) return;
+      activeCategoryId = next;
+      firstRender = true;                    // Zeilen sauber neu einblenden
+      render();
+    }
+
+    el.catBarInner.addEventListener('click', function (e) {
+      const pill = e.target.closest('.cat-pill');
+      if (!pill) return;
+      setActiveCategory(pill.dataset.catId === '' ? null : pill.dataset.catId);
+    });
+
     function ageBadge(task) {
       const age = daysBetween(task.createdAt, todayKey());
       if (age >= 1) {
@@ -1846,10 +2402,24 @@
         : '';
 
       if (isEditing) {
+        // Kategorie-Pills im Bearbeiten-Modus: der Weg ohne Drag (und mit
+        // Tastatur), um eine bestehende Task umzuhängen. Die Wahl wird erst
+        // mit „Speichern“ übernommen – Abbrechen verwirft sie.
+        const cats = liveCategories();
+        const chosen = editingCatChoice !== undefined ? editingCatChoice : (task.categoryId || null);
+        const catRow = cats.length
+          ? '<div class="sheet-cat-pills mt-2" role="group" aria-label="Kategorie wählen">' +
+              catPillButton(null, 'Ohne', chosen === null, 'data-action="edit-cat" data-id="' + task.id + '" data-cat=""') +
+              cats.map(function (c) {
+                return catPillButton(c.id, c.name, chosen === c.id, 'data-action="edit-cat" data-id="' + task.id + '" data-cat="' + c.id + '"');
+              }).join('') +
+            '</div>'
+          : '';
         return '<li data-id="' + task.id + '">' +
           '<div class="' + rowClasses + '" data-id="' + task.id + '">' +
             '<textarea class="task-edit-input task-input w-full rounded-xl border border-accent/40 bg-surface-700/80 px-3 py-2.5 text-base text-slate-100 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" ' +
               'data-id="' + task.id + '" rows="1" maxlength="2000" enterkeyhint="enter" aria-label="Task bearbeiten">' + escapeHtml(task.name) + '</textarea>' +
+            catRow +
             '<p class="mt-2 text-xs leading-relaxed text-slate-500">Enter macht eine neue Zeile, Strg+Enter (am Mac Cmd+Enter) speichert.</p>' +
             '<div class="mt-3 flex gap-2">' +
               '<button type="button" data-action="save" data-id="' + task.id + '" class="flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-surface-900 transition hover:bg-accent-glow active:scale-[0.98]">Speichern</button>' +
@@ -1872,6 +2442,7 @@
             '<label for="cb-' + task.id + '" class="flex min-w-0 cursor-pointer flex-wrap items-baseline gap-x-2 gap-y-1">' +
               '<span class="habit-label task-text' + (expanded ? '' : ' clamped') + ' min-w-0 break-words text-base font-medium text-slate-200">' + escapeHtml(task.name) + '</span>' +
               ageBadge(task) +
+              catChip(task) +
             '</label>' +
             '<button type="button" data-action="expand" data-id="' + task.id + '" ' +
               'class="' + (expanded ? '' : 'hidden ') + 'rounded-md text-left text-xs font-medium text-accent/70 transition hover:text-accent-glow">' +
@@ -1927,22 +2498,31 @@
     function renderList() {
       // Nicht die rohe Array-Reihenfolge, sondern nach Sektion + sortKey –
       // die Array-Reihenfolge kann nach einem Geräte-Merge beliebig sein.
+      // Gefiltert nach der aktiven Kategorie; die Nummerierung ①②③ leitet
+      // sich aus der Position in der SICHTBAREN Liste ab – eine Task kann
+      // also in ihrer Kategorie ① sein und in „Alle“ ④. Gewollt: die Nummer
+      // wird nie gespeichert.
       const before = captureRowRects();
-      const prio = sectionTasks(true);
-      const rest = sectionTasks(false);
+      const prio = visibleSectionTasks(true);
+      const rest = visibleSectionTasks(false);
       el.prioList.innerHTML = prio.map(function (t, i) {
         return taskRow(t, i, { number: i + 1 });
       }).join('');
       el.restList.innerHTML = rest.map(function (t, i) {
         return taskRow(t, i + prio.length, {});
       }).join('');
-      const tasks = state.tasks;
-      el.emptyState.classList.toggle('hidden', tasks.length > 0);
+      const anyVisible = prio.length + rest.length > 0;
+      el.emptyState.classList.toggle('hidden', anyVisible);
 
-      if (tasks.length === 0) {
+      if (!anyVisible) {
         const p = el.emptyState.querySelector('p');
         const sub = el.emptyState.querySelectorAll('p')[1];
-        if (doneToday() > 0) {
+        const activeCat = categoryById(activeCategoryId);
+        if (activeCat) {
+          // Leere Kategorie-Ansicht: freundlicher Platzhalter statt Weiss.
+          p.textContent = 'Noch nichts in „' + activeCat.name + '“';
+          sub.textContent = 'Zieh eine Task auf die Pill oben – oder leg unten eine neue an.';
+        } else if (doneToday() > 0) {
           p.textContent = 'Alles abgearbeitet';
           sub.textContent = 'Nichts mehr offen. Noch etwas hinzufügen?';
         } else {
@@ -1976,12 +2556,16 @@
       // genau einmal gerendert (onEnd).
       if (dragActive) return;
       applyIdentity();
+      renderCategoryBar();
       renderStats();
       renderList();
       renderHistory();
       // Offene Slot-Auswahl aktuell halten, falls z. B. ein Sync-Update
       // die Prio-Liste verändert, während das Sheet offen ist.
       if (sheetOpen && !el.addSheetStep2.hidden) renderSheetSlots();
+      if (sheetOpen && !el.addSheetStep1.hidden) renderAddSheetCats();
+      // Gleiches für die Kategorien-Verwaltung im Menü-Sheet.
+      if (menuSheetOpen && !el.menuStepCats.hidden) renderCatManage();
     }
 
     /* ============================================================
@@ -2108,7 +2692,17 @@
       pendingAddText = null;
       if (text == null) return;                    // schon angelegt (Doppel-Tap)
       const task = { id: newId(), name: text, createdAt: todayKey() };
-      placeTask(task, !!prioritized, prioritized ? index : Infinity);
+      // Kategorie aus dem Sheet (vorausgewählt: aktive Ansicht). Gilt auf
+      // JEDEM Weg aus dem Sheet – auch Backdrop-Tap und Wisch nach unten.
+      if (pendingAddCategoryId && categoryById(pendingAddCategoryId)) {
+        setTaskCategory(task, pendingAddCategoryId);
+      } else {
+        task.categoryId = null;
+        task.categoryAt = 0;
+      }
+      // Platzierung relativ zur SICHTBAREN Liste – in einer Kategorie-
+      // Ansicht landet die Task damit genau am gewählten sichtbaren Platz.
+      placeTaskVisible(task, !!prioritized, prioritized ? index : Infinity);
       freshIds.add(task.id);
       state.tasks.push(task);
       save();
@@ -2117,11 +2711,17 @@
       autoGrow(el.newInput);
 
       let message;
-      if (prioritized) {
-        const rank = sectionTasks(true).findIndex(function (t) { return t.id === task.id; }) + 1;
+      const rank = visibleSectionTasks(true).findIndex(function (t) { return t.id === task.id; }) + 1;
+      if (prioritized && rank > 0) {
         message = '„' + shortText(text) + '“ auf Platz ' + rank;
       } else {
         message = '„' + shortText(text) + '“ hinzugefügt';
+      }
+      // Landet die Task ausserhalb der gerade sichtbaren Kategorie-Ansicht,
+      // sagt der Toast dazu, wo sie ist – sonst wirkt sie wie verschwunden.
+      if (activeCategoryId !== null && (task.categoryId || null) !== activeCategoryId) {
+        const addedCat = categoryById(task.categoryId);
+        message += addedCat ? ' – in „' + addedCat.name + '“' : ' – ohne Kategorie';
       }
       // ~4 s Zeit für Rückgängig, falls man sich vertippt hat.
       showToast(message, 'Rückgängig', function () {
@@ -2135,6 +2735,9 @@
       pendingAddText = text;
       sheetOpen = true;
       el.addSheetTitle.textContent = '„' + shortText(text) + '“ priorisieren?';
+      // Kategorie-Vorauswahl: die gerade aktive Ansicht.
+      pendingAddCategoryId = activeCategoryId;
+      renderAddSheetCats();
       el.addSheetStep2.hidden = true;
       el.addSheetStep1.hidden = false;
       el.addSheetPanel.style.transform = '';
@@ -2160,9 +2763,11 @@
       commitPendingAdd(false);
     }
 
-    /** Schritt 2: die echte Prio-Liste mit n+1 tippbaren Einfüge-Slots. */
+    /** Schritt 2: die echte Prio-Liste mit n+1 tippbaren Einfüge-Slots.
+        In einer Kategorie-Ansicht die SICHTBARE Prio-Liste – der gewählte
+        Platz entspricht damit genau dem, was man nach dem Anlegen sieht. */
     function renderSheetSlots() {
-      const prio = sectionTasks(true);
+      const prio = visibleSectionTasks(true);
       let html = '';
       for (let i = 0; i <= prio.length; i++) {
         html += '<button type="button" class="slot-btn" data-slot="' + i + '"><span>Platz ' + (i + 1) + '</span></button>';
@@ -2176,19 +2781,16 @@
       el.addSheetSlots.innerHTML = html;
     }
 
-    /** Wechsel zwischen den Sheet-Schritten: Inhalt gleitet seitlich, die
-        Höhe des Panels animiert mit, statt zu springen. */
-    function showSheetStep(step) {
-      const showEl = step === 2 ? el.addSheetStep2 : el.addSheetStep1;
-      const hideEl = step === 2 ? el.addSheetStep1 : el.addSheetStep2;
-      if (step === 2) renderSheetSlots();
+    /** Wechsel zwischen zwei Sheet-Schritten: Inhalt gleitet seitlich, die
+        Höhe des Panels animiert mit, statt zu springen. Gemeinsame Mechanik
+        für das Anlege- und das Menü-Sheet. */
+    function animateSheetStep(steps, showEl, hideEl, enterRight) {
       if (!showEl.hidden && hideEl.hidden) return;
       if (reduceMotion) { hideEl.hidden = true; showEl.hidden = false; return; }
-      const steps = el.addSheetSteps;
       const fromHeight = steps.offsetHeight;
       hideEl.hidden = true;
       showEl.hidden = false;
-      showEl.classList.add(step === 2 ? 'step-enter-right' : 'step-enter-left');
+      showEl.classList.add(enterRight ? 'step-enter-right' : 'step-enter-left');
       steps.style.height = fromHeight + 'px';
       steps.style.overflow = 'hidden';
       const toHeight = showEl.offsetHeight;
@@ -2204,6 +2806,14 @@
       }, 320);
     }
 
+    function showSheetStep(step) {
+      if (step === 2) renderSheetSlots();
+      animateSheetStep(el.addSheetSteps,
+        step === 2 ? el.addSheetStep2 : el.addSheetStep1,
+        step === 2 ? el.addSheetStep1 : el.addSheetStep2,
+        step === 2);
+    }
+
     el.addSheetNo.addEventListener('click', function () { commitPendingAdd(false); });
     el.addSheetYes.addEventListener('click', function () { showSheetStep(2); });
     el.addSheetSlots.addEventListener('click', function (e) {
@@ -2211,44 +2821,392 @@
       if (!btn) return;
       commitPendingAdd(true, Number(btn.dataset.slot));
     });
+    /**
+     * Wurde wirklich NEBEN das Sheet getippt? contains() allein genügt nicht:
+     * Ein Knopf im Panel, der durch sein eigenes Neuzeichnen ersetzt wird
+     * (Kategorie-Pills, Kategorien-Verwaltung), hängt beim Hochblubbern
+     * nicht mehr im Dokument – das sähe wie ein Tipp auf den Hintergrund aus
+     * und würde das Sheet schliessen. Solche Klicks zählen hier als „drin“.
+     */
+    function clickedOutsidePanel(panel, e) {
+      if (!document.contains(e.target)) return false;
+      return !panel.contains(e.target);
+    }
+
     el.addSheet.addEventListener('click', function (e) {
-      if (!el.addSheetPanel.contains(e.target)) dismissAddSheet();
+      if (clickedOutsidePanel(el.addSheetPanel, e)) dismissAddSheet();
     });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && sheetOpen) { e.preventDefault(); dismissAddSheet(); }
     });
 
-    /* Wisch nach unten schliesst das Sheet (= „Nein“). Pointer Events, damit
-       Maus und Touch denselben Weg gehen. Innerhalb der Slot-Liste hat das
-       normale Scrollen Vorrang (touch-action: pan-y dort). */
-    let sheetPointer = null;
-    el.addSheetPanel.addEventListener('pointerdown', function (e) {
-      if (e.target.closest('.sheet-slots')) return;
-      sheetPointer = { id: e.pointerId, y: e.clientY, dy: 0, dragging: false };
-    });
-    el.addSheetPanel.addEventListener('pointermove', function (e) {
-      if (!sheetPointer || e.pointerId !== sheetPointer.id) return;
-      const dy = e.clientY - sheetPointer.y;
-      if (!sheetPointer.dragging) {
-        if (dy < 12) return;
-        sheetPointer.dragging = true;
-        try { el.addSheetPanel.setPointerCapture(e.pointerId); } catch (err) {}
-        el.addSheetPanel.style.transition = 'none';
+    /* Wisch nach unten schliesst ein Sheet. Pointer Events, damit Maus und
+       Touch denselben Weg gehen. Innerhalb von ignoreSelector (scrollbare
+       Listen, Textfelder) hat die normale Bedienung Vorrang. Was das
+       Schliessen bedeutet, entscheidet onDismiss – beim Anlegen „Nein, ans
+       Ende“ (die Task geht nie verloren), im Menü einfach zu. */
+    function attachSheetSwipe(panel, ignoreSelector, onDismiss) {
+      let ptr = null;
+      panel.addEventListener('pointerdown', function (e) {
+        if (ignoreSelector && e.target.closest(ignoreSelector)) return;
+        ptr = { id: e.pointerId, y: e.clientY, dy: 0, dragging: false };
+      });
+      panel.addEventListener('pointermove', function (e) {
+        if (!ptr || e.pointerId !== ptr.id) return;
+        const dy = e.clientY - ptr.y;
+        if (!ptr.dragging) {
+          if (dy < 12) return;
+          ptr.dragging = true;
+          try { panel.setPointerCapture(e.pointerId); } catch (err) {}
+          panel.style.transition = 'none';
+        }
+        ptr.dy = Math.max(0, dy);
+        panel.style.transform = 'translateY(' + ptr.dy + 'px)';
+      });
+      function end(e) {
+        if (!ptr || e.pointerId !== ptr.id) return;
+        const p = ptr;
+        ptr = null;
+        panel.style.transition = '';
+        if (!p.dragging) return;
+        if (p.dy > 90) onDismiss();
+        else panel.style.transform = '';
       }
-      sheetPointer.dy = Math.max(0, dy);
-      el.addSheetPanel.style.transform = 'translateY(' + sheetPointer.dy + 'px)';
-    });
-    function endSheetPointer(e) {
-      if (!sheetPointer || e.pointerId !== sheetPointer.id) return;
-      const p = sheetPointer;
-      sheetPointer = null;
-      el.addSheetPanel.style.transition = '';
-      if (!p.dragging) return;
-      if (p.dy > 90) dismissAddSheet();
-      else el.addSheetPanel.style.transform = '';
+      panel.addEventListener('pointerup', end);
+      panel.addEventListener('pointercancel', end);
     }
-    el.addSheetPanel.addEventListener('pointerup', endSheetPointer);
-    el.addSheetPanel.addEventListener('pointercancel', endSheetPointer);
+    attachSheetSwipe(el.addSheetPanel, '.sheet-slots', dismissAddSheet);
+
+    /* ------------------------------------------------------------
+       Anlege-Sheet: Kategorie-Zeile in Schritt 1
+
+       Vorausgewählt ist die Kategorie der aktiven Ansicht – Anlegen bleibt
+       in einer Kategorie-Ansicht damit zwei Taps. Ohne Kategorien ist die
+       Zeile ausgeblendet und der Flow sieht exakt aus wie bisher.
+       ------------------------------------------------------------ */
+    let pendingAddCategoryId = null;
+
+    function renderAddSheetCats() {
+      const cats = liveCategories();
+      el.addSheetCats.classList.toggle('hidden', !cats.length);
+      if (!cats.length) { pendingAddCategoryId = null; return; }
+      // Kategorie kann inzwischen (auch per Sync) weg sein.
+      if (pendingAddCategoryId && !categoryById(pendingAddCategoryId)) pendingAddCategoryId = null;
+      let html = catPillButton(null, 'Ohne', pendingAddCategoryId === null, 'data-cat=""');
+      cats.forEach(function (c) {
+        html += catPillButton(c.id, c.name, pendingAddCategoryId === c.id, 'data-cat="' + c.id + '"');
+      });
+      el.addSheetCatPills.innerHTML = html;
+    }
+
+    el.addSheetCatPills.addEventListener('click', function (e) {
+      const pill = e.target.closest('.cat-pill');
+      if (!pill) return;
+      pendingAddCategoryId = pill.dataset.cat === '' ? null : pill.dataset.cat;
+      renderAddSheetCats();
+    });
+
+    /* ------------------------------------------------------------
+       Menü-Sheet (fester Knopf oben rechts): Task hinzufügen, Kategorien
+       verwalten, Einstellungen – gleiche Bottom-Sheet-Mechanik wie beim
+       Anlegen. Hier bedeutet Schliessen einfach Schliessen.
+       ------------------------------------------------------------ */
+    let menuSheetOpen = false;
+    let catEditingId = null;      // Kategorie, deren Name gerade bearbeitet wird
+    let catConfirmId = null;      // Kategorie mit offener Lösch-Rückfrage
+
+    function openMenuSheet() {
+      menuSheetOpen = true;
+      catEditingId = null;
+      hideCatConfirm();
+      el.menuStepCats.hidden = true;
+      el.menuStepMain.hidden = false;
+      const n = liveCategories().length;
+      el.menuCatCount.textContent = n ? String(n) : '';
+      el.menuSheetPanel.style.transform = '';
+      el.menuSheet.classList.remove('hidden');
+      requestAnimationFrame(function () {
+        el.menuSheetBackdrop.classList.remove('opacity-0');
+        el.menuSheetPanel.classList.add('sheet-open');
+      });
+    }
+
+    function closeMenuSheet() {
+      if (!menuSheetOpen) return;
+      menuSheetOpen = false;
+      el.menuSheetBackdrop.classList.add('opacity-0');
+      el.menuSheetPanel.classList.remove('sheet-open');
+      el.menuSheetPanel.style.transform = '';
+      setTimeout(function () { if (!menuSheetOpen) el.menuSheet.classList.add('hidden'); }, 350);
+    }
+
+    function showMenuStep(step) {
+      if (step === 2) renderCatManage();
+      animateSheetStep(el.menuSheetSteps,
+        step === 2 ? el.menuStepCats : el.menuStepMain,
+        step === 2 ? el.menuStepMain : el.menuStepCats,
+        step === 2);
+    }
+
+    el.menuBtn.addEventListener('click', openMenuSheet);
+    el.menuSheet.addEventListener('click', function (e) {
+      if (clickedOutsidePanel(el.menuSheetPanel, e)) closeMenuSheet();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menuSheetOpen) { e.preventDefault(); closeMenuSheet(); }
+    });
+    attachSheetSwipe(el.menuSheetPanel, '.cat-manage-list, input, textarea', closeMenuSheet);
+
+    el.menuAddTask.addEventListener('click', function () {
+      // Öffnet denselben Anlege-Flow wie der Knopf unten – der bleibt
+      // zusätzlich erhalten.
+      closeMenuSheet();
+      setTimeout(function () {
+        showAddForm();
+        try { el.addForm.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+      }, reduceMotion ? 0 : 320);
+    });
+    el.menuCategories.addEventListener('click', function () { showMenuStep(2); });
+    el.menuCatsBack.addEventListener('click', function () { showMenuStep(1); });
+    el.menuSettings.addEventListener('click', function () {
+      closeMenuSheet();
+      setTimeout(function () { openSettings(); }, reduceMotion ? 0 : 320);
+    });
+
+    /* ---- Kategorien-Verwaltung (eigene Ebene im Menü-Sheet) ---- */
+
+    const CAT_SVG = {
+      grip: '<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><circle cx="7" cy="5" r="1.4"/><circle cx="13" cy="5" r="1.4"/><circle cx="7" cy="10" r="1.4"/><circle cx="13" cy="10" r="1.4"/><circle cx="7" cy="15" r="1.4"/><circle cx="13" cy="15" r="1.4"/></svg>',
+      pencil: '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897l12.682-12.68Z" /></svg>',
+      trash: '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>',
+      check: '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>',
+      x: '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>',
+    };
+
+    function hideCatConfirm() {
+      catConfirmId = null;
+      el.catConfirm.classList.add('hidden');
+      el.catConfirm.innerHTML = '';
+    }
+
+    function renderCatManage() {
+      const cats = liveCategories();
+      const counts = openCountByCategory();
+      el.menuCatCount.textContent = cats.length ? String(cats.length) : '';
+      if (catConfirmId && !categoryById(catConfirmId)) hideCatConfirm();
+      if (catEditingId && !categoryById(catEditingId)) catEditingId = null;
+      if (!cats.length) {
+        el.catManageList.innerHTML =
+          '<li class="rounded-xl border border-dashed border-white/10 px-4 py-5 text-center text-xs leading-relaxed text-slate-500">' +
+          'Noch keine Kategorien. Leg unten die erste an – die Filter-Leiste erscheint dann automatisch oben.</li>';
+        return;
+      }
+      el.catManageList.innerHTML = cats.map(function (c) {
+        if (catEditingId === c.id) {
+          return '<li class="cat-row" data-cat-id="' + c.id + '">' +
+            '<input type="text" maxlength="40" value="' + escapeHtml(c.name) + '" enterkeyhint="done" ' +
+              'class="cat-rename-input min-w-0 flex-1 rounded-lg border border-accent/40 bg-surface-700 px-2.5 py-2 text-base text-slate-100 focus:border-accent focus:outline-none" ' +
+              'data-cat-id="' + c.id + '" aria-label="„' + escapeHtml(c.name) + '“ umbenennen" />' +
+            '<button type="button" class="cat-row-btn text-accent-glow" data-cat-action="rename-save" data-cat-id="' + c.id + '" aria-label="Namen speichern">' + CAT_SVG.check + '</button>' +
+            '<button type="button" class="cat-row-btn" data-cat-action="rename-cancel" data-cat-id="' + c.id + '" aria-label="Umbenennen abbrechen">' + CAT_SVG.x + '</button>' +
+          '</li>';
+        }
+        return '<li class="cat-row" data-cat-id="' + c.id + '">' +
+          '<span class="cat-row-handle" aria-hidden="true">' + CAT_SVG.grip + '</span>' +
+          '<span class="cat-dot" style="background:' + catColor(c.id) + '"></span>' +
+          '<span class="cat-row-name">' + escapeHtml(c.name) + '</span>' +
+          '<span class="cat-row-count">' + (counts[c.id] || 0) + '</span>' +
+          '<button type="button" class="cat-row-btn" data-cat-action="rename" data-cat-id="' + c.id + '" aria-label="„' + escapeHtml(c.name) + '“ umbenennen">' + CAT_SVG.pencil + '</button>' +
+          '<button type="button" class="cat-row-btn hover:text-red-400" data-cat-action="delete" data-cat-id="' + c.id + '" aria-label="„' + escapeHtml(c.name) + '“ löschen">' + CAT_SVG.trash + '</button>' +
+        '</li>';
+      }).join('');
+      if (catEditingId) {
+        const input = el.catManageList.querySelector('.cat-rename-input');
+        if (input) requestAnimationFrame(function () { input.focus(); input.select(); });
+      }
+    }
+
+    function addCategory(rawName) {
+      const name = normalizeText(rawName).slice(0, CAT_NAME_MAX);
+      if (!name) { showToast('Gib der Kategorie einen Namen.'); el.catNewName.focus(); return false; }
+      const dupe = liveCategories().some(function (c) { return c.name.toLowerCase() === name.toLowerCase(); });
+      if (dupe) { showToast('„' + name + '“ gibt es schon.'); return false; }
+      let maxOrder = 0;
+      liveCategories().forEach(function (c) { if (c.order > maxOrder) maxOrder = c.order; });
+      const now = Date.now();
+      state.categories.push({ id: newCategoryId(), name: name, order: maxOrder + 1000, createdAt: now, updatedAt: now });
+      save();
+      render();
+      renderCatManage();
+      showToast('Kategorie „' + name + '“ angelegt');
+      return true;
+    }
+
+    function renameCategory(id, rawName) {
+      const c = categoryById(id);
+      if (!c) return;
+      const name = normalizeText(rawName).slice(0, CAT_NAME_MAX);
+      if (!name) { showToast('Der Name darf nicht leer sein.'); return; }
+      const dupe = liveCategories().some(function (c2) {
+        return c2.id !== id && c2.name.toLowerCase() === name.toLowerCase();
+      });
+      if (dupe) { showToast('„' + name + '“ gibt es schon.'); return; }
+      catEditingId = null;
+      if (name !== c.name) {
+        c.name = name;
+        c.updatedAt = Date.now();
+        save();
+        render();
+        showToast('Umbenannt in „' + name + '“');
+      }
+      renderCatManage();
+    }
+
+    /** Lösch-Rückfrage inline im Sheet – Tasks werden dabei NIEMALS gelöscht. */
+    function showDeleteConfirm(id) {
+      const c = categoryById(id);
+      if (!c) return;
+      catConfirmId = id;
+      const n = openCountByCategory()[id] || 0;
+      const tasksNote = n === 0
+        ? 'Sie enthält keine offenen Tasks.'
+        : (n === 1
+            ? 'Die eine Task darin bleibt erhalten und wird zu „Ohne Kategorie“.'
+            : 'Die ' + n + ' Tasks darin bleiben erhalten und werden zu „Ohne Kategorie“.');
+      el.catConfirm.innerHTML =
+        '<p>Kategorie „' + escapeHtml(c.name) + '“ löschen? ' + tasksNote + '</p>' +
+        '<div class="mt-3 flex gap-2">' +
+          '<button type="button" class="sheet-btn sheet-btn-secondary" data-cat-action="delete-cancel">Abbrechen</button>' +
+          '<button type="button" class="sheet-btn" style="border:1px solid rgba(248,113,113,0.4);background:rgba(248,113,113,0.12);color:#f87171" data-cat-action="delete-confirm" data-cat-id="' + id + '">Löschen</button>' +
+        '</div>';
+      el.catConfirm.classList.remove('hidden');
+    }
+
+    /** Löschen = Tombstone (deleted:true + frisches updatedAt): nur so setzt
+        es sich beim Merge gegen den älteren Stand anderer Geräte durch. Die
+        Tasks darin werden zu „Ohne Kategorie“ – mit frischem categoryAt,
+        damit auch das auf allen Geräten ankommt. */
+    function deleteCategory(id) {
+      const c = state.categories.find(function (c2) { return c2.id === id; });
+      if (!c || c.deleted) return;
+      const name = c.name;
+      const now = Date.now();
+      c.deleted = true;
+      c.updatedAt = now;
+      state.tasks.forEach(function (t) {
+        if (t.categoryId === id) { t.categoryId = null; t.categoryAt = now; }
+      });
+      if (activeCategoryId === id) activeCategoryId = null;   // Ansicht fällt auf „Alle“ zurück
+      hideCatConfirm();
+      save();
+      render();
+      renderCatManage();
+      showToast('Kategorie „' + name + '“ gelöscht – die Tasks bleiben erhalten');
+    }
+
+    /** Neue Position in der Kategorien-Reihenfolge – Lückenzahl-Prinzip wie
+        bei den Tasks, updatedAt-Stempel für den Merge. */
+    function reorderCategory(id, newIndex) {
+      const c = categoryById(id);
+      if (!c) return;
+      const rest = liveCategories().filter(function (c2) { return c2.id !== id; });
+      let orderVal;
+      if (!rest.length) {
+        orderVal = 1000;
+      } else if (newIndex <= 0) {
+        orderVal = rest[0].order - 1000;
+      } else if (newIndex >= rest.length) {
+        orderVal = rest[rest.length - 1].order + 1000;
+      } else {
+        const beforeC = rest[newIndex - 1];
+        const afterC = rest[newIndex];
+        if (afterC.order - beforeC.order < MIN_SORT_GAP) {
+          const now = Date.now();
+          liveCategories().forEach(function (c2, i) { c2.order = (i + 1) * 1000; c2.updatedAt = now; });
+          return reorderCategory(id, newIndex);
+        }
+        orderVal = (beforeC.order + afterC.order) / 2;
+      }
+      c.order = orderVal;
+      c.updatedAt = Date.now();
+      save();
+      render();
+      renderCatManage();
+    }
+
+    el.menuStepCats.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-cat-action]');
+      if (!btn) return;
+      const action = btn.dataset.catAction;
+      const id = btn.dataset.catId;
+      if (action === 'rename') { catEditingId = id; hideCatConfirm(); renderCatManage(); }
+      else if (action === 'rename-cancel') { catEditingId = null; renderCatManage(); }
+      else if (action === 'rename-save') {
+        const input = el.catManageList.querySelector('.cat-rename-input[data-cat-id="' + id + '"]');
+        renameCategory(id, input ? input.value : '');
+      }
+      else if (action === 'delete') { catEditingId = null; showDeleteConfirm(id); renderCatManage(); }
+      else if (action === 'delete-cancel') hideCatConfirm();
+      else if (action === 'delete-confirm') deleteCategory(id);
+    });
+    el.menuStepCats.addEventListener('keydown', function (e) {
+      if (!e.target.classList || !e.target.classList.contains('cat-rename-input')) return;
+      if (e.key === 'Enter') { e.preventDefault(); renameCategory(e.target.dataset.catId, e.target.value); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();               // nur das Umbenennen abbrechen, nicht das Sheet
+        catEditingId = null;
+        renderCatManage();
+      }
+    });
+    el.catAddBtn.addEventListener('click', function () {
+      if (addCategory(el.catNewName.value)) el.catNewName.value = '';
+    });
+    el.catNewName.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (addCategory(el.catNewName.value)) el.catNewName.value = '';
+      }
+    });
+
+    /** Reihenfolge der Kategorien per Drag am Anfasser (SortableJS ist eh da). */
+    function initCatManageDrag() {
+      if (!window.Sortable) return;
+      try {
+        new Sortable(el.catManageList, {
+          animation: reduceMotion ? 0 : 150,
+          handle: '.cat-row-handle',
+          ghostClass: 'cat-row-ghost',
+          forceFallback: true,
+          fallbackOnBody: true,
+          onEnd: function (evt) {
+            const id = evt.item && evt.item.dataset ? evt.item.dataset.catId : null;
+            if (id && evt.newIndex !== evt.oldIndex) reorderCategory(id, evt.newIndex);
+            else renderCatManage();
+          },
+        });
+      } catch (e) {/* dann lässt sich die Reihenfolge eben nicht ziehen */}
+    }
+    initCatManageDrag();
+
+    /* ------------------------------------------------------------
+       Fester Menü-Knopf: sichtbar ganz oben und beim Hochscrollen, blendet
+       beim Runterscrollen weich aus (CSS-Transition). Während eines Drags
+       versteckt ihn body.is-dragging per CSS.
+       ------------------------------------------------------------ */
+    let lastScrollY = window.scrollY || 0;
+    let menuBtnTick = false;
+    function updateMenuBtn() {
+      const y = window.scrollY || 0;
+      if (y <= 16 || y < lastScrollY - 2) el.menuBtn.classList.remove('menu-btn-hidden');
+      else if (y > lastScrollY + 2) el.menuBtn.classList.add('menu-btn-hidden');
+      lastScrollY = y;
+    }
+    window.addEventListener('scroll', function () {
+      if (menuBtnTick) return;
+      menuBtnTick = true;
+      requestAnimationFrame(function () { menuBtnTick = false; updateMenuBtn(); });
+    }, { passive: true });
 
     /** Position einer Task in der Liste, frisch ermittelt statt gemerkt. */
     function indexOfTask(id) {
@@ -2290,12 +3248,13 @@
           const i = indexOfTask(id);                   // Index frisch bestimmen
           if (i === -1) return;
           state.tasks.splice(i, 1);
-          // carryNote: die Anmerkung samt Zeitstempel wandert mit in den Verlauf.
+          // carryNote/carryCategory: Anmerkung und Kategorie wandern mit in
+          // den Verlauf – beim Wiederöffnen kommen beide zurück.
           // doneTs hält den genauen Moment fest – daran erkennt der Sync, ob ein
           // späteres Abhaken jünger ist als ein früheres Wiederöffnen.
-          const entry = carryNote(task, {
+          const entry = carryCategory(task, carryNote(task, {
             id: task.id, name: task.name, date: todayKey(), createdAt: task.createdAt, doneTs: Date.now(),
-          });
+          }));
           delete state.reopened[task.id];
           state.journal.push(entry);
           save();
@@ -2337,11 +3296,15 @@
       markReopened(entry.id);
 
       if (indexOfTask(entry.id) === -1) {
-        const task = carryNote(entry, {
+        // carryCategory: die Task kehrt mit ihrer alten Kategorie zurück.
+        // Gibt es die inzwischen nicht mehr, setzt ensureTaskCategories()
+        // sie auf null – unkategorisiert statt verschwunden.
+        const task = carryCategory(entry, carryNote(entry, {
           id: entry.id,
           name: entry.name,
           createdAt: entry.createdAt || entry.date,
-        });
+        }));
+        ensureTaskCategories([task], state.categories);
         placeTask(task, false, Infinity);    // unpriorisiert ans Ende
         state.tasks.push(task);
         freshIds.add(task.id);
@@ -2395,6 +3358,11 @@
       const task = state.tasks.find(function (t) { return t.id === id; });
       if (!task) return;
       task.name = name;
+      // Im Bearbeiten-Modus gewählte Kategorie erst jetzt übernehmen.
+      if (editingCatChoice !== undefined && (task.categoryId || null) !== editingCatChoice) {
+        setTaskCategory(task, editingCatChoice);
+      }
+      editingCatChoice = undefined;
       editingId = null;
       save();
       render();
@@ -2499,9 +3467,24 @@
 
       if (action === 'delete') return deleteTask(id);
       if (action === 'note') return openNoteModal(id);
-      if (action === 'edit') { editingId = id; return renderList(); }
-      if (action === 'cancel') { editingId = null; return renderList(); }
+      if (action === 'edit') { editingId = id; editingCatChoice = undefined; return renderList(); }
+      if (action === 'cancel') { editingId = null; editingCatChoice = undefined; return renderList(); }
       if (action === 'expand') { toggleExpanded(id); return renderList(); }
+      if (action === 'edit-cat') {
+        // Nur die Pill-Optik umschalten – KEIN renderList(), sonst ginge
+        // gerade getippter Text im Bearbeitungsfeld verloren. Übernommen
+        // wird die Wahl erst mit „Speichern“.
+        editingCatChoice = btn.dataset.cat === '' ? null : btn.dataset.cat;
+        const row = btn.closest('.habit-row');
+        if (row) {
+          row.querySelectorAll('[data-action="edit-cat"]').forEach(function (p) {
+            const active = (p.dataset.cat === '' ? null : p.dataset.cat) === editingCatChoice;
+            p.classList.toggle('is-active', active);
+            p.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+        }
+        return;
+      }
       if (action === 'save') {
         const input = el.list.querySelector('.task-edit-input[data-id="' + id + '"]');
         return saveEdit(id, input ? input.value : '');
@@ -2517,7 +3500,7 @@
         e.preventDefault();
         saveEdit(e.target.dataset.id, e.target.value);
       }
-      if (e.key === 'Escape') { e.preventDefault(); editingId = null; renderList(); }
+      if (e.key === 'Escape') { e.preventDefault(); editingId = null; editingCatChoice = undefined; renderList(); }
     });
 
     // Das Bearbeitungsfeld wächst beim Tippen mit.
@@ -2534,18 +3517,21 @@
     function moveTaskBy(id, delta) {
       const task = state.tasks.find(function (t) { return t.id === id; });
       if (!task) return;
-      const list = sectionTasks(task.prioritized);
+      // Immer auf der SICHTBAREN Liste arbeiten – in einer Kategorie-Ansicht
+      // wird der neue sortKey aus den sichtbaren Nachbarn berechnet.
+      const list = visibleSectionTasks(task.prioritized);
       const idx = list.findIndex(function (t) { return t.id === id; });
+      if (idx === -1) return;
       if (delta > 0 && idx === list.length - 1) {
         if (!task.prioritized) return;               // schon ganz unten
-        placeTask(task, false, 0);                   // über die Trennlinie nach unten
+        placeTaskVisible(task, false, 0);            // über die Trennlinie nach unten
       } else if (delta < 0 && idx === 0) {
         if (task.prioritized) return;                // schon ganz oben
-        placeTask(task, true, Infinity);             // über die Trennlinie nach oben
+        placeTaskVisible(task, true, Infinity);      // über die Trennlinie nach oben
       } else {
         // innerhalb der Sektion: vor den oberen bzw. hinter den unteren
         // Nachbarn (Index bezieht sich auf die Liste OHNE die Task selbst).
-        placeTask(task, task.prioritized, delta > 0 ? idx + 1 : idx - 1);
+        placeTaskVisible(task, task.prioritized, delta > 0 ? idx + 1 : idx - 1);
       }
       save();
       render();
@@ -2625,28 +3611,142 @@
         state.tasks.forEach(function (t) { localById.set(t.id, t); });
         p.tasks = p.tasks.map(function (t) {
           const l = t && localById.get(t.id);
+          let out = t;
           if (l && (Number(l.sortedAt) || 0) > (Number(t && t.sortedAt) || 0)) {
-            return Object.assign({}, t, { prioritized: l.prioritized, sortKey: l.sortKey, sortedAt: l.sortedAt });
+            out = Object.assign({}, out, { prioritized: l.prioritized, sortKey: l.sortKey, sortedAt: l.sortedAt });
           }
-          return t;
+          // Gleiches Muster für die Kategorie: eine Zuweisung, die während
+          // des Drags passiert ist (Drop auf eine Pill), darf der gepufferte
+          // ältere Cloud-Stand nicht zurückdrehen.
+          if (l && (Number(l.categoryAt) || 0) > (Number(t && t.categoryAt) || 0)) {
+            out = Object.assign({}, out, { categoryId: l.categoryId || null, categoryAt: l.categoryAt });
+          }
+          return out;
         });
       }
       applySyncPayload(p);                   // rendert selbst
       return true;
     }
 
+    /* ------------------------------------------------------------
+       Drag auf die Kategorie-Leiste (Kategorie zuweisen)
+
+       Klare Schwelle gegen die Priorisieren-Geste: INNERHALB der Liste wird
+       sortiert/priorisiert, erst OBERHALB – über der sticky Leiste – wird
+       zugewiesen. Der Übergang ist sichtbar: die Leiste hebt sich an
+       (cat-drop-mode), die Sortier-Lücke in der Liste verschwindet
+       (CSS: display:none auf .drag-ghost).
+
+       SortableJS läuft mit forceFallback, deshalb eigener Treffertest:
+       pointermove/touchmove → elementFromPoint über den Pills (die
+       mitfliegende Kopie ist pointer-events:none, sonst träfe man nur sie).
+       Kein Render während des Drags – die Klassen werden direkt gesetzt.
+       ------------------------------------------------------------ */
+    const sortableInstances = [];
+    let catDropMode = false;
+    let catDropTargetId;                 // undefined = kein Ziel, null = „Alle“, sonst Kategorie-id
+    let catDwellTimer = null;
+
+    /* Auto-Scroll bleibt bewusst eingeschaltet, auch im Kategorie-Modus: Es
+       scrollt zur Leiste HIN (hilft also beim Hinziehen), und sobald die
+       Seite oben steht, tut es nichts mehr – die Leiste ist sticky und
+       bleibt unter dem Finger. Ein Umschalten von scroll mitten im Drag
+       wäre schädlich: Sortables Auto-Scroll-Plugin räumt sein Intervall
+       dann nicht mehr auf und greift nach dem Drop ins Leere. */
+
+    function clearCatDropPill() {
+      clearTimeout(catDwellTimer);
+      catDwellTimer = null;
+      catDropTargetId = undefined;
+      el.catBarInner.querySelectorAll('.cat-pill').forEach(function (p) {
+        p.classList.remove('cat-drop-hover', 'cat-drop-armed');
+      });
+    }
+
+    function setCatDropMode(on) {
+      if (catDropMode === on) return;
+      catDropMode = on;
+      el.catBar.classList.toggle('cat-drop-mode', on);
+      document.body.classList.toggle('cat-drop-mode', on);
+      if (!on) clearCatDropPill();
+    }
+
+    function setCatDropPill(pill) {
+      const pillId = pill ? (pill.dataset.catId === '' ? null : pill.dataset.catId) : undefined;
+      if (pillId === catDropTargetId) return;
+      clearCatDropPill();
+      if (!pill) return;
+      catDropTargetId = pillId;
+      pill.classList.add('cat-drop-hover');
+      // ~400 ms Verweilen: die Pill leuchtet als aktives Ziel auf.
+      catDwellTimer = setTimeout(function () { pill.classList.add('cat-drop-armed'); }, 400);
+    }
+
+    function onDragPointer(x, y) {
+      if (!dragActive || !document.body.classList.contains('has-catbar')) return;
+      const rect = el.catBar.getBoundingClientRect();
+      // Alles auf Höhe der Leiste oder darüber (Notch-Bereich) zählt als
+      // Leisten-Zone – die Liste beginnt erst unterhalb.
+      const inBar = y <= rect.bottom;
+      setCatDropMode(inBar);
+      if (!inBar) return;
+      const probeY = Math.min(Math.max(y, rect.top + 2), rect.bottom - 2);
+      const hit = document.elementFromPoint(x, probeY);
+      setCatDropPill(hit && hit.closest ? hit.closest('#cat-bar .cat-pill') : null);
+    }
+
+    // Sortable (forceFallback) arbeitet je nach Gerät mit Touch- oder
+    // Maus-Events – beide Wege führen hierher, capture-Phase reicht.
+    document.addEventListener('pointermove', function (e) {
+      if (dragActive) onDragPointer(e.clientX, e.clientY);
+    }, true);
+    document.addEventListener('touchmove', function (e) {
+      if (dragActive && e.touches && e.touches[0]) onDragPointer(e.touches[0].clientX, e.touches[0].clientY);
+    }, true);
+
+    /** Drop auf eine Pill: Kategorie zuweisen, Priorisierung unangetastet.
+        Kurzer Bestätigungs-Toast mit Rückgängig. */
+    function assignCategory(task, categoryId) {
+      const prevId = task.categoryId || null;
+      const nextId = categoryId || null;
+      if (prevId === nextId) return;
+      setTaskCategory(task, nextId);
+      save();
+      const cat = categoryById(nextId);
+      const label = nextId === null ? 'Ohne Kategorie' : (cat ? '„' + cat.name + '“' : '');
+      showToast('„' + shortText(task.name) + '“ → ' + label, 'Rückgängig', function () {
+        const t = state.tasks.find(function (t2) { return t2.id === task.id; });
+        if (!t) return;
+        // Frischer Stempel: das Rückgängig muss sich auch im Sync gegen die
+        // gerade gemachte Zuweisung durchsetzen.
+        setTaskCategory(t, prevId);
+        save();
+        render();
+      }, 4200);
+    }
+
     function finishDrag(evt) {
       document.body.classList.remove('is-dragging');
+      const droppedOnBar = catDropMode;
+      const dropTargetId = catDropTargetId;
+      setCatDropMode(false);
       if (!dragActive) return;
       dragActive = false;
 
       const id = evt.item && evt.item.dataset ? evt.item.dataset.id : null;
       const task = id ? state.tasks.find(function (t) { return t.id === id; }) : null;
-      if (task && evt.to) {
+      if (task && droppedOnBar) {
+        // Über der Leiste losgelassen: NICHT umsortieren. Auf einer Pill →
+        // zuweisen („Alle“ = keine Kategorie); daneben → nichts, die Task
+        // springt mit dem Render unten an ihren alten Platz zurück.
+        if (dropTargetId !== undefined) assignCategory(task, dropTargetId);
+      } else if (task && evt.to) {
         const toPrio = evt.to === el.prioList;
-        // newIndex zählt die Position in der Ziel-Liste; ohne die bewegte
-        // Task selbst ist das genau der Einfüge-Index für orderKeyAt().
-        placeTask(task, toPrio, evt.newIndex);
+        // newIndex zählt die Position in der sichtbaren Ziel-Liste; ohne die
+        // bewegte Task selbst ist das genau der Einfüge-Index. In einer
+        // Kategorie-Ansicht rechnet placeTaskVisible() den sortKey aus den
+        // sichtbaren Nachbarn – global widerspruchsfrei.
+        placeTaskVisible(task, toPrio, evt.newIndex);
         save();                              // ein Zustands-Write, debounced in die Cloud
       }
       // Genau EIN Render nach dem Drop – mit dem gepufferten Sync-Stand,
@@ -2703,8 +3803,8 @@
         onEnd: finishDrag,
       };
       try {
-        new Sortable(el.prioList, options);
-        new Sortable(el.restList, options);
+        sortableInstances.push(new Sortable(el.prioList, options));
+        sortableInstances.push(new Sortable(el.restList, options));
       } catch (e) {/* ohne Drag & Drop bleibt alles andere benutzbar */}
     }
     initDrag();
@@ -3253,7 +4353,6 @@
       el.settingsPanel.classList.add('opacity-0', 'translate-y-6');
       setTimeout(function () { if (!settingsOpen) el.settingsModal.classList.add('hidden'); }, 300);
     }
-    el.settingsBtn.addEventListener('click', function () { openSettings(); });
     el.settingsClose.addEventListener('click', closeSettings);
     // Tippen ausserhalb des Panels schliesst. Auf dem ganzen Overlay lauschen
     // statt nur auf dem Backdrop – der zentrierende Wrapper liegt darüber und
@@ -3449,6 +4548,7 @@
       return JSON.parse(JSON.stringify({
         tasks: state.tasks || [],
         journal: state.journal || [],
+        categories: state.categories || [],
         reopened: state.reopened || {},
         history: state.history || {},
         bestStreak: state.bestStreak || 0,
@@ -3465,9 +4565,13 @@
       // Während eines aktiven Drags puffern – flushPendingSync() wendet den
       // Stand nach dem Drop an, sonst springt die Task aus dem Finger.
       if (dragActive) { pendingSyncPayload = payload; return; }
-      // ensureTaskOrder: ein Cloud-Stand von einem Gerät mit alter
-      // App-Version kann Tasks ohne Ordnungsfelder enthalten.
+      // ensureTaskOrder/ensureTaskCategories: ein Cloud-Stand von einem Gerät
+      // mit alter App-Version kann Tasks ohne Ordnungs-/Kategoriefelder
+      // enthalten. Fehlen die categories im Payload (alte Version), bleibt
+      // der lokale Bestand stehen statt geleert zu werden.
+      if (Array.isArray(payload.categories)) state.categories = sanitizeCategories(payload.categories);
       if (Array.isArray(payload.tasks)) state.tasks = ensureTaskOrder(payload.tasks);
+      ensureTaskCategories(state.tasks, state.categories);
       if (Array.isArray(payload.journal)) state.journal = payload.journal;
       state.reopened = sanitizeReopened(payload.reopened);
       if (payload.history && typeof payload.history === 'object') state.history = payload.history;
@@ -3912,7 +5016,7 @@
     function localPayload() {
       const b = bridge();
       return (b && b.getSyncPayload) ? b.getSyncPayload()
-        : { tasks: [], journal: [], reopened: {}, history: {}, bestStreak: 0 };
+        : { tasks: [], journal: [], categories: [], reopened: {}, history: {}, bestStreak: 0 };
     }
     function applyPayload(p) { const b = bridge(); if (b && b.applySyncPayload) b.applySyncPayload(p); }
 
@@ -4002,6 +5106,52 @@
       return out;
     }
 
+    /* Kategorie-Zuweisung einer Task: gleiches Muster wie withNewerOrder –
+       je Task gewinnt die Seite mit dem jüngeren categoryAt, unabhängig
+       davon, wessen Task-Objekt inhaltlich übernommen wird. */
+    function catAssignStamp(t) {
+      const s = Number(t && t.categoryAt);
+      return isFinite(s) && s > 0 ? s : 0;
+    }
+    function withNewerCategory(winner, other) {
+      if (!other || catAssignStamp(other) <= catAssignStamp(winner)) return winner;
+      const out = Object.assign({}, winner);
+      out.categoryId = (typeof other.categoryId === 'string' && other.categoryId) ? other.categoryId : null;
+      out.categoryAt = catAssignStamp(other);
+      return out;
+    }
+    /** Ordnung UND Kategorie von der jeweils jüngeren Seite übernehmen. */
+    function withNewerMeta(winner, other) {
+      return withNewerCategory(withNewerOrder(winner, other), other);
+    }
+
+    /* Kategorien selbst: je id gewinnt der jüngere Stand (updatedAt) – auch
+       ein Löschen ist nur so ein Stand (deleted:true als Tombstone). Nur so
+       setzt sich das Löschen auf Gerät A gegen den älteren Stand auf B
+       durch; umgekehrt gewinnt ein späteres Umbenennen gegen ein früheres
+       Löschen. Abgelaufene Tombstones werden hier weggeräumt.
+       (Konstanten bewusst doppelt zum Hauptskript – eigener Geltungsbereich,
+       siehe MAX_REOPENED oben.) */
+    const CAT_TOMBSTONE_MS = 90 * 24 * 60 * 60 * 1000;
+    function catStamp(c) {
+      const t = Number(c && c.updatedAt);
+      return isFinite(t) && t > 0 ? t : 0;
+    }
+    function mergeCategories(a, b) {
+      const m = new Map();
+      [a, b].forEach(function (list) {
+        (Array.isArray(list) ? list : []).forEach(function (c) {
+          if (!c || typeof c.id !== 'string' || !c.id) return;
+          const seen = m.get(c.id);
+          if (!seen || catStamp(c) > catStamp(seen)) m.set(c.id, c);
+        });
+      });
+      const now = Date.now();
+      return Array.from(m.values()).filter(function (c) {
+        return !(c.deleted && (now - catStamp(c)) > CAT_TOMBSTONE_MS);
+      });
+    }
+
     // Wieder geöffnete Aufgaben: je id gilt der jüngere Zeitpunkt.
     function mergeReopened(a, b) {
       const out = {};
@@ -4047,15 +5197,16 @@
       const done = new Set(journal.map(function (e) { return e.id; }));
       const tm = new Map();
       (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) { if (t && t.id) tm.set(t.id, t); });
-      // Inhaltlich gewinnt beim Erstabgleich die lokale Fassung – die
-      // Reihenfolge aber die Seite mit dem jüngeren sortedAt.
+      // Inhaltlich gewinnt beim Erstabgleich die lokale Fassung – Reihenfolge
+      // und Kategorie-Zuweisung aber die Seite mit dem jüngeren Stempel.
       (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
-        if (t && t.id) tm.set(t.id, withNewerOrder(t, tm.get(t.id)));
+        if (t && t.id) tm.set(t.id, withNewerMeta(t, tm.get(t.id)));
       });
       const tasks = Array.from(tm.values()).filter(function (t) { return !done.has(t.id); });
       return {
         tasks: tasks,
         journal: journal,
+        categories: mergeCategories(remote.categories, local.categories),
         reopened: reopened,
         history: Object.assign({}, remote.history || {}, local.history || {}),
         bestStreak: Math.max(Number(local.bestStreak) || 0, Number(remote.bestStreak) || 0),
@@ -4072,11 +5223,12 @@
       const lm = new Map();
       (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) { if (t && t.id) lm.set(t.id, t); });
       const tm = new Map();
-      // Inhaltlich gewinnt die Cloud – die Reihenfolge aber die Seite mit
-      // dem jüngeren sortedAt: eine gerade gemachte lokale Umsortierung
-      // darf ein (älterer) eintreffender Cloud-Stand nicht überschreiben.
+      // Inhaltlich gewinnt die Cloud – Reihenfolge und Kategorie-Zuweisung
+      // aber die Seite mit dem jüngeren Stempel: eine gerade gemachte lokale
+      // Umsortierung oder Zuweisung darf ein (älterer) eintreffender
+      // Cloud-Stand nicht überschreiben.
       (Array.isArray(remote.tasks) ? remote.tasks : []).forEach(function (t) {
-        if (t && t.id) tm.set(t.id, withNewerOrder(t, lm.get(t.id)));
+        if (t && t.id) tm.set(t.id, withNewerMeta(t, lm.get(t.id)));
       });
       (Array.isArray(local.tasks) ? local.tasks : []).forEach(function (t) {
         if (t && t.id && !tm.has(t.id) && recentlyReopened(local.reopened, t.id)) tm.set(t.id, t);
@@ -4085,6 +5237,7 @@
       return {
         tasks: tasks,
         journal: journal,
+        categories: mergeCategories(remote.categories, local.categories),
         reopened: reopened,
         history: Object.assign({}, local.history || {}, remote.history || {}),
         bestStreak: Math.max(Number(local.bestStreak) || 0, Number(remote.bestStreak) || 0),
@@ -4262,7 +5415,7 @@
       // Erstabgleich: lokalen und Cloud-Stand vereinen, hochschreiben, anwenden.
       try {
         const snap = await getDoc(userRef);
-        const remote = snap.exists() ? snap.data() : { tasks: [], journal: [], reopened: {}, history: {}, bestStreak: 0 };
+        const remote = snap.exists() ? snap.data() : { tasks: [], journal: [], categories: [], reopened: {}, history: {}, bestStreak: 0 };
         const merged = loginMerge(localPayload(), remote);
         lastSyncedJson = JSON.stringify(merged);
         await setDoc(userRef, merged);

@@ -1,7 +1,9 @@
-# Tests für Priorisierung & Sortierung
+# Tests für Priorisierung, Sortierung & Kategorien
 
 Diese Tests sichern das Priorisierungs-Feature ab (Datenmodell, Migration,
-Geräte-Merge, Zwei-Sektionen-Layout, Bottom Sheet, Drag & Drop, Tastatur).
+Geräte-Merge, Zwei-Sektionen-Layout, Bottom Sheet, Drag & Drop, Tastatur)
+sowie die Kategorien (Filter-Leiste, Zuweisung per Drag, Verwaltung,
+Löschen über Geräte hinweg).
 Sie laufen nur lokal – GitHub Pages liefert sie zwar als statische Dateien
 aus, aber nichts in der App referenziert sie, das Deployment ändert sich
 dadurch nicht.
@@ -13,7 +15,8 @@ Extrahieren die Sortier- und Merge-Funktionen direkt aus der ausgelieferten
 Code, kein Duplikat:
 
 ```bash
-node tools/tests/unit-order-sync.test.js
+node tools/tests/unit-order-sync.test.js    # Sortierung, Prio, Merge
+node tools/tests/unit-categories.test.js    # Kategorien: Migration, Tombstones, Filter-Einsortierung
 ```
 
 Braucht nur Node.js (>= 18), keine npm-Pakete.
@@ -34,6 +37,7 @@ node tools/tests/smoke-phase2.js    # Zwei Sektionen, Nummerierung, Platzhalter
 node tools/tests/smoke-phase3.js    # Bottom Sheet (Ja/Nein, Slots, Backdrop, Swipe)
 node tools/tests/smoke-phase4.js    # Drag & Drop (Maus + Touch, Sync-Pufferung)
 node tools/tests/smoke-phase5.js    # Tastatur-Fallback Alt+Pfeil
+node tools/tests/smoke-phase6.js    # Kategorien: Leiste, Filter, Verwaltung, Drag auf Pill
 ```
 
 Liegt Chromium an einem eigenen Pfad, diesen über die Umgebungsvariable
@@ -43,7 +47,7 @@ Liegt Chromium an einem eigenen Pfad, diesen über die Umgebungsvariable
 CHROMIUM_PATH=/pfad/zu/chromium node tools/tests/smoke-phase4.js
 ```
 
-Jeder Smoke-Test benutzt einen eigenen Port (8791–8799) und räumt den
+Jeder Smoke-Test benutzt einen eigenen Port (8791–8796) und räumt den
 Server am Ende selbst wieder ab. Die Tests verändern nur den localStorage
 des Test-Browsers, nie echte Daten – Firebase wird nicht kontaktiert
 (die Seite läuft dabei bewusst im nicht angemeldeten, lokalen Modus).
