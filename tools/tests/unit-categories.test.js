@@ -26,11 +26,20 @@ const catApi = (state) => makeCatApi(normText, state || { categories: [], tasks:
 
 /* ---- Block B: Ordnungs- und Filter-Helfer aus dem Hauptskript ---- */
 const orderBlock = slice('const MIN_SORT_GAP', '/* ------------------------------------------------------------\n       Wieder geöffnete Aufgaben').code;
-const makeOrderApi = new Function('state', orderBlock + `
+// categoryById kommt aus Block A und wird hier hineingereicht: der
+// Filter-Block ruft es auf, um verwaiste Verweise im Verlauf zu erkennen.
+const makeOrderApi = new Function('state', 'categoryById', orderBlock + `
   return { ensureTaskOrder, sectionTasks, orderKeyAt, placeTask,
            visibleSectionTasks, keyBetweenVisible, placeTaskVisible,
+           entryCategoryId, visibleJournal,
            setFilter: function (id) { activeCategoryId = id; } };
 `);
+/** Order-API mit einem Kategorien-Bestand, wie ihn die App zur Laufzeit hätte. */
+function orderApiWith(state, categories) {
+  const catState = { categories: categories || [], tasks: state.tasks || [] };
+  const api = catApi(catState);
+  return makeOrderApi(state, api.categoryById);
+}
 
 /* ---- Block C: Merge-Strecke aus dem Firebase-Modul ---- */
 const moduleStart = html.lastIndexOf('const MAX_REOPENED = 300;');
@@ -319,6 +328,66 @@ t('keyBetweenVisible: zu kleine Lücke rebalanciert die GANZE Sektion einmalig',
   // Nach Rebalance: a=1000, b=2000, c=3000 → Mittelwert von a und c = 2000
   assert.strictEqual(key, 2000);
   assert.deepStrictEqual(state.tasks.map(x => x.sortKey), [1000, 2000, 3000]);
+});
+
+/* ============ Verlauf folgt dem Kategorie-Filter ============ */
+function journalState() {
+  return { tasks: [], journal: [
+    { id: 'j1', name: 'Arbeit erledigt', date: '2026-08-18', categoryId: 'c1', categoryAt: 5 },
+    { id: 'j2', name: 'Privat erledigt', date: '2026-08-18', categoryId: 'c2', categoryAt: 5 },
+    { id: 'j3', name: 'Ohne Kategorie', date: '2026-08-17' },
+    { id: 'j4', name: 'Noch was aus Arbeit', date: '2026-08-17', categoryId: 'c1', categoryAt: 5 },
+    { id: 'j5', name: 'Verwaist', date: '2026-08-17', categoryId: 'c-weg', categoryAt: 5 },
+  ] };
+}
+const LIVE_CATS = [
+  { id: 'c1', name: 'Arbeit', order: 1000, updatedAt: 1 },
+  { id: 'c2', name: 'Privat', order: 2000, updatedAt: 1 },
+];
+
+t('Verlauf in „Alle“: wirklich alle erledigten Aufgaben, quer über die Kategorien', () => {
+  const st = journalState();
+  const api = orderApiWith(st, LIVE_CATS);
+  assert.deepStrictEqual(api.visibleJournal().map(e => e.id), ['j1', 'j2', 'j3', 'j4', 'j5']);
+});
+
+t('Verlauf in einer Kategorie: nur deren erledigte Aufgaben', () => {
+  const st = journalState();
+  const api = orderApiWith(st, LIVE_CATS);
+  api.setFilter('c1');
+  assert.deepStrictEqual(api.visibleJournal().map(e => e.id), ['j1', 'j4']);
+  api.setFilter('c2');
+  assert.deepStrictEqual(api.visibleJournal().map(e => e.id), ['j2']);
+});
+
+t('Verlauf: frisch angelegte Kategorie ist leer, die anderen bleiben unberührt', () => {
+  const st = journalState();
+  const api = orderApiWith(st, LIVE_CATS.concat([{ id: 'c-neu', name: 'Geschäftlich', order: 3000, updatedAt: 1 }]));
+  api.setFilter('c-neu');
+  assert.deepStrictEqual(api.visibleJournal(), []);
+  api.setFilter(null);
+  assert.strictEqual(api.visibleJournal().length, 5);
+});
+
+t('Verlauf: Eintrag ohne und mit verwaister Kategorie zählt als „ohne“ – nur unter „Alle“', () => {
+  const st = journalState();
+  const api = orderApiWith(st, LIVE_CATS);
+  assert.strictEqual(api.entryCategoryId(st.journal[2]), null);   // nie eine gehabt
+  assert.strictEqual(api.entryCategoryId(st.journal[4]), null);   // Kategorie gelöscht
+  api.setFilter('c1');
+  assert.ok(!api.visibleJournal().some(e => e.id === 'j5'), 'verwaister Eintrag taucht nicht in einer Kategorie auf');
+  api.setFilter(null);
+  assert.ok(api.visibleJournal().some(e => e.id === 'j5'), 'unter „Alle“ ist er sichtbar');
+});
+
+t('Verlauf: Tombstone-Kategorie wird wie gelöscht behandelt', () => {
+  const st = journalState();
+  const api = orderApiWith(st, LIVE_CATS.concat([
+    { id: 'c-weg', name: 'Weg', order: 3000, updatedAt: Date.now(), deleted: true },
+  ]));
+  assert.strictEqual(api.entryCategoryId(st.journal[4]), null);
+  api.setFilter('c-weg');
+  assert.deepStrictEqual(api.visibleJournal(), []);
 });
 
 console.log('\n' + passed + ' Tests bestanden.');

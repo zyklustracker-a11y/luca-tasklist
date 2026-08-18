@@ -38,6 +38,7 @@ node tools/tests/smoke-phase3.js    # Bottom Sheet (Ja/Nein, Slots, Backdrop, Sw
 node tools/tests/smoke-phase4.js    # Drag & Drop (Maus + Touch, Sync-Pufferung)
 node tools/tests/smoke-phase5.js    # Tastatur-Fallback Alt+Pfeil
 node tools/tests/smoke-phase6.js    # Kategorien: Leiste, Filter, Verwaltung, Drag auf Pill
+node tools/tests/smoke-phase7.js    # Verlauf pro Kategorie + Feinschliff am Drag
 ```
 
 Liegt Chromium an einem eigenen Pfad, diesen über die Umgebungsvariable
